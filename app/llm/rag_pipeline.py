@@ -136,10 +136,22 @@ class HealthcareRAGPipeline:
         # shorter and more varied. Use a separate, more permissive threshold for
         # document retrieval; the LLM prompt still instructs the model to ignore
         # irrelevant passages rather than treating every match as evidence.
+        # If the user explicitly selected one PDF, retrieve its best passages even
+        # when a broad question such as "What is this document about?" has a low
+        # cosine score. The selected filename already scopes the search to that PDF.
+        selected_specific_pdf = bool(
+            document_filename
+            and document_filename not in {"__all__", "__most_relevant__"}
+        )
+        document_threshold = (
+            0.0
+            if selected_specific_pdf
+            else min(self.settings.similarity_threshold, 0.20)
+        )
         doc_results: list[DocumentSearchResult] = self.document_retriever.search(
             query=question,
             top_k=4,
-            min_similarity=min(self.settings.similarity_threshold, 0.20),
+            min_similarity=document_threshold,
             filename=document_filename,
         )
         document_context_block = _build_document_context_block(doc_results)
