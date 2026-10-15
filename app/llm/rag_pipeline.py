@@ -88,7 +88,12 @@ class HealthcareRAGPipeline:
             settings=app_settings,
         )
 
-    def answer_question(self, question: str, model_override: str | None = None) -> RAGResponse:
+    def answer_question(
+        self,
+        question: str,
+        model_override: str | None = None,
+        document_filename: str | None = None,
+    ) -> RAGResponse:
         """Run full unified RAG pipeline for a user question.
 
         Evidence sources, in priority order:
@@ -135,6 +140,7 @@ class HealthcareRAGPipeline:
             query=question,
             top_k=4,
             min_similarity=min(self.settings.similarity_threshold, 0.20),
+            filename=document_filename,
         )
         document_context_block = _build_document_context_block(doc_results)
 
