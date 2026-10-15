@@ -99,6 +99,7 @@ class DocumentRetriever:
         query: str,
         top_k: int = 4,
         min_similarity: float = 0.20,
+        filename: str | None = None,
     ) -> list[DocumentSearchResult]:
         """Search indexed document chunks by semantic cosine similarity."""
         if not self.vector_store or not query.strip():
@@ -109,6 +110,11 @@ class DocumentRetriever:
             query_vector=query_vec,
             top_k=top_k,
             min_similarity=min_similarity,
+            filter_fn=(
+                (lambda metadata: metadata.get("filename") == filename)
+                if filename
+                else None
+            ),
         )
 
         return [
