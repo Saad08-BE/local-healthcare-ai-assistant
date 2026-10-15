@@ -1,0 +1,13 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.DS_Store
+*/.DS_Store
+
+# Local healthcare data and generated artifacts must not be committed.
+data/
+vector_store/
+models/
+logs/

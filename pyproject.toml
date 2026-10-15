@@ -1,0 +1,5 @@
+[project]
+name = "local-healthcare-intelligence"
+version = "0.1.0"
+description = "A local-only, privacy-first healthcare intelligence system."
+requires-python = ">=3.9"

@@ -1,0 +1,7 @@
+[server]
+# The healthcare interface must never listen on a LAN or public interface.
+address = "127.0.0.1"
+headless = true
+
+[browser]
+gatherUsageStats = false
