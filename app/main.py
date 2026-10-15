@@ -129,45 +129,50 @@ def run() -> None:
 
     # 9. ── Unified Gemini-style input pill ──
     #    Layout: [➕]  [text input .................]  [model▾]  [➤]
-    with st.form("unified_chat_form", clear_on_submit=True):
-        c_plus, c_text, c_model, c_send = st.columns([0.55, 7, 1.8, 0.55])
+    # Keep the attachment button OUTSIDE the chat form. In a Streamlit form,
+    # pressing Enter can activate the first submit button, regardless of which
+    # button the user intended to use. A regular button avoids that conflict.
+    c_plus, c_chat = st.columns([0.55, 9.35])
 
-        # Create the send button first so Enter submits the question rather than
-        # triggering the PDF attachment button. The columns keep the same layout.
-        with c_send:
-            send_clicked = st.form_submit_button(
-                "➤",
-                type="primary",
-                use_container_width=True,
-            )
+    with c_plus:
+        attach_clicked = st.button(
+            "＋",
+            help="Upload a local medical PDF to index",
+            use_container_width=True,
+            key="toggle_pdf_upload",
+        )
 
-        with c_plus:
-            attach_clicked = st.form_submit_button(
-                "＋",
-                help="Upload a local medical PDF to index",
-                use_container_width=True,
-            )
+    with c_chat:
+        with st.form("unified_chat_form", clear_on_submit=True):
+            c_text, c_model, c_send = st.columns([7, 1.8, 0.55])
 
-        with c_text:
-            user_query = st.text_input(
-                "query",
-                placeholder="Ask a healthcare question or inquire about medical PDFs...",
-                label_visibility="collapsed",
-                key="unified_query_input",
-            )
+            with c_text:
+                user_query = st.text_input(
+                    "query",
+                    placeholder="Ask a healthcare question or inquire about medical PDFs...",
+                    label_visibility="collapsed",
+                    key="unified_query_input",
+                )
 
-        with c_model:
-            sel_model = st.selectbox(
-                "Model",
-                options=available_models,
-                index=(
-                    available_models.index(st.session_state.selected_model)
-                    if st.session_state.selected_model in available_models
-                    else 0
-                ),
-                label_visibility="collapsed",
-                key="unified_model_select",
-            )
+            with c_model:
+                sel_model = st.selectbox(
+                    "Model",
+                    options=available_models,
+                    index=(
+                        available_models.index(st.session_state.selected_model)
+                        if st.session_state.selected_model in available_models
+                        else 0
+                    ),
+                    label_visibility="collapsed",
+                    key="unified_model_select",
+                )
+
+            with c_send:
+                send_clicked = st.form_submit_button(
+                    "➤",
+                    type="primary",
+                    use_container_width=True,
+                )
 
     # Handle + (PDF toggle) — capture model before rerun
     if attach_clicked:
