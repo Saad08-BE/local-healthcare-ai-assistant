@@ -127,10 +127,14 @@ class HealthcareRAGPipeline:
         )
 
         # --- 3. Document Semantic Retrieval ---
+        # PDF chunks often score lower than whole clinical records because they are
+        # shorter and more varied. Use a separate, more permissive threshold for
+        # document retrieval; the LLM prompt still instructs the model to ignore
+        # irrelevant passages rather than treating every match as evidence.
         doc_results: list[DocumentSearchResult] = self.document_retriever.search(
             query=question,
             top_k=4,
-            min_similarity=self.settings.similarity_threshold,
+            min_similarity=min(self.settings.similarity_threshold, 0.20),
         )
         document_context_block = _build_document_context_block(doc_results)
 
