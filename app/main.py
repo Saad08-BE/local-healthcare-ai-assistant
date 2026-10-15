@@ -132,6 +132,15 @@ def run() -> None:
     with st.form("unified_chat_form", clear_on_submit=True):
         c_plus, c_text, c_model, c_send = st.columns([0.55, 7, 1.8, 0.55])
 
+        # Create the send button first so Enter submits the question rather than
+        # triggering the PDF attachment button. The columns keep the same layout.
+        with c_send:
+            send_clicked = st.form_submit_button(
+                "➤",
+                type="primary",
+                use_container_width=True,
+            )
+
         with c_plus:
             attach_clicked = st.form_submit_button(
                 "＋",
@@ -158,13 +167,6 @@ def run() -> None:
                 ),
                 label_visibility="collapsed",
                 key="unified_model_select",
-            )
-
-        with c_send:
-            send_clicked = st.form_submit_button(
-                "➤",
-                type="primary",
-                use_container_width=True,
             )
 
     # Handle + (PDF toggle) — capture model before rerun
