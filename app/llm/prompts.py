@@ -47,7 +47,7 @@ def build_grounded_prompt(
 USER QUESTION:
 {question}
 
-RESPONSE INSTRUCTIONS:
+INSTRUCTIONS FOR YOUR RESPONSE
 - Start by answering the user's actual question in clear, plain language.
 - PDF upload is optional. Never ask for a PDF merely because retrieval returned no evidence.
 - Use dataset or document evidence only when it is relevant to this question.
