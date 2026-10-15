@@ -76,6 +76,40 @@ def save_and_index_pdf(
         raise
 
 
+
+def list_saved_pdfs(settings: AppSettings) -> list[Path]:
+    """Return saved local PDFs in a stable, user-friendly order."""
+    documents_dir = settings.paths.documents_dir
+    if not documents_dir.exists():
+        return []
+    return sorted(
+        (
+            path for path in documents_dir.iterdir()
+            if path.is_file() and path.suffix.lower() == ".pdf" and not path.name.startswith(".")
+        ),
+        key=lambda path: path.name.lower(),
+    )
+
+
+def render_saved_pdf_library(st_module, settings: AppSettings) -> None:
+    """Show the persistent local PDF library in the sidebar."""
+    sidebar = st_module.sidebar
+    saved_pdfs = list_saved_pdfs(settings)
+    with sidebar.expander(f"📚 Uploaded PDFs ({len(saved_pdfs)})", expanded=True):
+        if not saved_pdfs:
+            sidebar.caption("No PDFs saved yet. Use ＋ beside the question box to add one.")
+            return
+
+        sidebar.caption("Saved on this Mac · available for future questions")
+        for pdf_path in saved_pdfs:
+            try:
+                size_kb = max(1, round(pdf_path.stat().st_size / 1024))
+                sidebar.markdown(f"**📄 {pdf_path.name}**")
+                sidebar.caption(f"{size_kb} KB · stored locally")
+            except OSError:
+                sidebar.markdown(f"📄 {pdf_path.name}")
+
+
 def render_pdf_upload_modal(
     st_module,
     settings: AppSettings,
