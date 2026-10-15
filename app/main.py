@@ -74,7 +74,7 @@ def run() -> None:
 
     # 5. Left Sidebar Navigation
     render_sidebar_navigation(st, settings)
-    render_saved_pdf_library(st, settings)
+    render_saved_pdf_library(st, settings, on_indexed=get_pipeline.clear)
 
     # 6. Top Status Bar  (privacy pill LEFT | incognito toggle RIGHT)
     top_col1, top_col2 = st.columns([8, 2])
