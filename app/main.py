@@ -190,9 +190,20 @@ def run() -> None:
         pipeline = get_pipeline(settings)
         with st.chat_message("assistant"):
             with st.spinner(f"Consulting local clinical evidence using `{sel_model}`..."):
+                selected_pdf = st.session_state.get(
+                    "active_pdf_for_questions", "Most relevant PDF (automatic)"
+                )
+                if selected_pdf == "Most relevant PDF (automatic)":
+                    document_filename = "__most_relevant__"
+                elif selected_pdf == "Search all PDFs":
+                    document_filename = "__all__"
+                else:
+                    document_filename = selected_pdf
+
                 response: RAGResponse = pipeline.answer_question(
                     query_to_run,
                     model_override=sel_model,
+                    document_filename=document_filename,
                 )
 
             if response.urgent_warning:
