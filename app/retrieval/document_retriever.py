@@ -106,16 +106,31 @@ class DocumentRetriever:
             return []
 
         query_vec = self.embedding_model.embed_text(query)
+        # Search broadly first so automatic mode can identify the strongest
+        # matching document before selecting chunks for citations.
+        automatic_document = filename == "__most_relevant__"
+        search_filename = filename if filename and not automatic_document and filename != "__all__" else None
         raw_results = self.vector_store.search(
             query_vector=query_vec,
-            top_k=top_k,
+            top_k=max(top_k * 4, 12) if automatic_document else top_k,
             min_similarity=min_similarity,
             filter_fn=(
-                (lambda metadata: metadata.get("filename") == filename)
-                if filename
+                (lambda metadata: metadata.get("filename") == search_filename)
+                if search_filename
                 else None
             ),
         )
+
+        if automatic_document and raw_results:
+            best_filename = raw_results[0].metadata.get("filename")
+            raw_results = [
+                result for result in raw_results
+                if result.metadata.get("filename") == best_filename
+            ][:top_k]
+        elif filename == "__all__":
+            raw_results = raw_results[:top_k]
+        else:
+            raw_results = raw_results[:top_k]
 
         return [
             DocumentSearchResult(
