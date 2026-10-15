@@ -18,7 +18,12 @@ from app.llm.rag_pipeline import HealthcareRAGPipeline, RAGResponse
 from app.safety import healthcare_disclaimer
 from app.ui.chat_state import get_current_session, initialize_session_state
 from app.ui.evidence_viewer import render_evidence_panel
-from app.ui.input_controls import get_available_models, render_pdf_upload_modal
+from app.ui.input_controls import (
+    get_available_models,
+    list_saved_pdfs,
+    render_pdf_upload_modal,
+    render_saved_pdf_library,
+)
 from app.ui.settings_dialog import render_settings_dialog
 from app.ui.sidebar import render_sidebar_navigation
 from app.ui.theme import apply_gemini_theme
@@ -69,6 +74,7 @@ def run() -> None:
 
     # 5. Left Sidebar Navigation
     render_sidebar_navigation(st, settings)
+    render_saved_pdf_library(st, settings)
 
     # 6. Top Status Bar  (privacy pill LEFT | incognito toggle RIGHT)
     top_col1, top_col2 = st.columns([8, 2])
@@ -196,6 +202,17 @@ def run() -> None:
                 )
 
             st.markdown(response.answer)
+
+            # A saved PDF can remain available even when this particular query
+            # does not retrieve a matching passage. Explain that distinction so
+            # users are not prompted to upload the same file again.
+            saved_pdfs = list_saved_pdfs(settings)
+            if saved_pdfs and not response.document_sources:
+                st.info(
+                    "Your PDF file(s) are saved locally, so you do not need to upload them again. "
+                    "However, no matching PDF passages were retrieved for this question. "
+                    "Try asking with a specific phrase, topic, or section title from the document."
+                )
 
             mode_badge = (
                 f"🟢 Local LLM ({response.llm_model})"
