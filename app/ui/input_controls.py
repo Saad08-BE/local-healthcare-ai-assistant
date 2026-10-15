@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tempfile
 from typing import TYPE_CHECKING, Callable
 from uuid import uuid4
 
@@ -91,8 +92,54 @@ def list_saved_pdfs(settings: AppSettings) -> list[Path]:
     )
 
 
-def render_saved_pdf_library(st_module, settings: AppSettings) -> None:
-    """Show the persistent local PDF library in the sidebar."""
+def delete_saved_pdf(filename: str, settings: AppSettings) -> None:
+    """Delete a saved PDF and rebuild the PDF index without its content."""
+    # Accept only a plain filename, never a path supplied by the UI.
+    if Path(filename).name != filename or Path(filename).suffix.lower() != ".pdf":
+        raise ValueError("Invalid PDF filename.")
+
+    documents_dir = settings.paths.documents_dir
+    target = documents_dir / filename
+    if not target.is_file():
+        raise FileNotFoundError(f"PDF not found: {filename}")
+
+    ingestor = PDFIngestor(
+        chunk_size=settings.chunk_size,
+        chunk_overlap=settings.chunk_overlap,
+    )
+    remaining_chunks = []
+    for pdf_path in list_saved_pdfs(settings):
+        if pdf_path.name != filename:
+            remaining_chunks.extend(ingestor.process_file(pdf_path))
+
+    vector_store_dir = settings.paths.vector_store_dir
+    vectors_file = vector_store_dir / "document_index_vectors.json"
+    metadata_file = vector_store_dir / "document_index_metadata.jsonl"
+
+    # Build the replacement index in a temporary directory first. If indexing
+    # fails, the original PDF and its current index remain untouched.
+    with tempfile.TemporaryDirectory(prefix="pdf-index-") as temp_dir:
+        temp_path = Path(temp_dir)
+        if remaining_chunks:
+            retriever = DocumentRetriever(embedding_model=None)
+            retriever.index_chunks(remaining_chunks, temp_path)
+        target.unlink()
+
+        if remaining_chunks:
+            vector_store_dir.mkdir(parents=True, exist_ok=True)
+            (temp_path / "document_index_vectors.json").replace(vectors_file)
+            (temp_path / "document_index_metadata.jsonl").replace(metadata_file)
+        else:
+            vectors_file.unlink(missing_ok=True)
+            metadata_file.unlink(missing_ok=True)
+
+
+def render_saved_pdf_library(
+    st_module,
+    settings: AppSettings,
+    on_indexed: Callable[[], None] | None = None,
+) -> None:
+    """Show saved PDFs and allow users to delete them from local storage."""
     sidebar = st_module.sidebar
     saved_pdfs = list_saved_pdfs(settings)
     with sidebar.expander(f"📚 Uploaded PDFs ({len(saved_pdfs)})", expanded=True):
@@ -128,6 +175,45 @@ def render_saved_pdf_library(st_module, settings: AppSettings) -> None:
                 st_module.caption(f"{size_kb} KB · stored locally")
             except OSError:
                 st_module.markdown(f"📄 {pdf_path.name}")
+
+            if st_module.button(
+                "🗑️ Delete PDF",
+                key=f"delete_pdf_{pdf_path.name}",
+                use_container_width=True,
+            ):
+                st_module.session_state["pending_pdf_deletion"] = pdf_path.name
+
+            if st_module.session_state.get("pending_pdf_deletion") == pdf_path.name:
+                st_module.warning(
+                    f"Delete **{pdf_path.name}** permanently from this Mac and remove its passages from the PDF search index?"
+                )
+                confirm_col, cancel_col = st_module.columns(2)
+                with confirm_col:
+                    if st_module.button(
+                        "Delete permanently",
+                        key=f"confirm_delete_pdf_{pdf_path.name}",
+                        type="primary",
+                        use_container_width=True,
+                    ):
+                        try:
+                            delete_saved_pdf(pdf_path.name, settings)
+                            if st_module.session_state.get("active_pdf_for_questions") == pdf_path.name:
+                                st_module.session_state["active_pdf_for_questions"] = "Most relevant PDF (automatic)"
+                            st_module.session_state.pop("pending_pdf_deletion", None)
+                            if on_indexed:
+                                on_indexed()
+                            st_module.success(f"Deleted {pdf_path.name} and updated the PDF search index.")
+                            st_module.rerun()
+                        except (OSError, ValueError, RuntimeError) as exc:
+                            st_module.error(f"Unable to delete PDF: {exc}")
+                with cancel_col:
+                    if st_module.button(
+                        "Cancel",
+                        key=f"cancel_delete_pdf_{pdf_path.name}",
+                        use_container_width=True,
+                    ):
+                        st_module.session_state.pop("pending_pdf_deletion", None)
+                        st_module.rerun()
 
 
 def render_pdf_upload_modal(
