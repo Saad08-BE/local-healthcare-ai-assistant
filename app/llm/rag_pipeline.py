@@ -144,7 +144,7 @@ class HealthcareRAGPipeline:
             and document_filename not in {"__all__", "__most_relevant__"}
         )
         document_threshold = (
-            0.0
+            -1.0
             if selected_specific_pdf
             else min(self.settings.similarity_threshold, 0.20)
         )
