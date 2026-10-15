@@ -101,6 +101,26 @@ def render_saved_pdf_library(st_module, settings: AppSettings) -> None:
             return
 
         st_module.caption("Saved on this Mac · available for future questions")
+        document_options = [
+            "Most relevant PDF (automatic)",
+            "Search all PDFs",
+            *[path.name for path in saved_pdfs],
+        ]
+        current_choice = st_module.session_state.get(
+            "active_pdf_for_questions", "Most relevant PDF (automatic)"
+        )
+        if current_choice not in document_options:
+            current_choice = "Most relevant PDF (automatic)"
+        st_module.selectbox(
+            "PDF source for questions",
+            options=document_options,
+            index=document_options.index(current_choice),
+            key="active_pdf_for_questions",
+            help=(
+                "Choose once which PDF to use for follow-up questions. Automatic mode "
+                "uses the single most relevant PDF for each question."
+            ),
+        )
         for pdf_path in saved_pdfs:
             try:
                 size_kb = max(1, round(pdf_path.stat().st_size / 1024))
