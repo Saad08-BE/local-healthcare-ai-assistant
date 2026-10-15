@@ -97,17 +97,17 @@ def render_saved_pdf_library(st_module, settings: AppSettings) -> None:
     saved_pdfs = list_saved_pdfs(settings)
     with sidebar.expander(f"📚 Uploaded PDFs ({len(saved_pdfs)})", expanded=True):
         if not saved_pdfs:
-            sidebar.caption("No PDFs saved yet. Use ＋ beside the question box to add one.")
+            st_module.caption("No PDFs saved yet. Use ＋ beside the question box to add one.")
             return
 
-        sidebar.caption("Saved on this Mac · available for future questions")
+        st_module.caption("Saved on this Mac · available for future questions")
         for pdf_path in saved_pdfs:
             try:
                 size_kb = max(1, round(pdf_path.stat().st_size / 1024))
-                sidebar.markdown(f"**📄 {pdf_path.name}**")
-                sidebar.caption(f"{size_kb} KB · stored locally")
+                st_module.markdown(f"**📄 {pdf_path.name}**")
+                st_module.caption(f"{size_kb} KB · stored locally")
             except OSError:
-                sidebar.markdown(f"📄 {pdf_path.name}")
+                st_module.markdown(f"📄 {pdf_path.name}")
 
 
 def render_pdf_upload_modal(
