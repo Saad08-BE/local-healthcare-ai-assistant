@@ -100,8 +100,9 @@ def delete_saved_pdf(filename: str, settings: AppSettings) -> None:
 
     documents_dir = settings.paths.documents_dir
     target = documents_dir / filename
-    if not target.is_file():
-        raise FileNotFoundError(f"PDF not found: {filename}")
+    # The sidebar can be stale if the file was removed outside the app.
+    # Continue rebuilding the index from the files that currently exist.
+    target_exists = target.is_file()
 
     ingestor = PDFIngestor(
         chunk_size=settings.chunk_size,
@@ -123,7 +124,7 @@ def delete_saved_pdf(filename: str, settings: AppSettings) -> None:
         if remaining_chunks:
             retriever = DocumentRetriever(embedding_model=None)
             retriever.index_chunks(remaining_chunks, temp_path)
-        target.unlink()
+        target.unlink(missing_ok=True)
 
         if remaining_chunks:
             vector_store_dir.mkdir(parents=True, exist_ok=True)
