@@ -12,7 +12,11 @@ from app.llm.rag_pipeline import RAGResponse
 
 def render_evidence_panel(st_module, response: RAGResponse) -> None:
     """Render an expandable, tabbed evidence drawer showing the exact grounding data."""
-    with st_module.expander("🔍 View Retrieved Grounding Evidence & Citations", expanded=False):
+    with st_module.expander("📚 Sources & supporting evidence", expanded=False):
+        st_module.caption(
+            "Review the local document excerpts and retrieved records that informed this response. "
+            "Retrieved evidence is context, not a medical diagnosis."
+        )
         tab_docs, tab_cohort, tab_cases = st_module.tabs([
             f"📄 PDF Documents ({len(response.document_sources)})",
             "📊 Cohort Statistics",
@@ -23,7 +27,8 @@ def render_evidence_panel(st_module, response: RAGResponse) -> None:
         with tab_docs:
             if response.document_sources:
                 for idx, doc in enumerate(response.document_sources, 1):
-                    st_module.markdown(f"**[{idx}] {doc.citation}** — *Similarity Score: `{doc.score:.2f}`*")
+                    st_module.markdown(f"**📄 {idx}. {doc.citation}**")
+                    st_module.caption(f"Retrieval similarity: {doc.score:.2f}")
                     st_module.info(doc.text)
             else:
                 st_module.caption("No matching excerpts found in local PDF documents.")
@@ -53,7 +58,8 @@ def render_evidence_panel(st_module, response: RAGResponse) -> None:
         with tab_cases:
             if response.retrieved_cases:
                 for idx, case in enumerate(response.retrieved_cases, 1):
-                    st_module.markdown(f"**Case / Consultation {idx}** — *Similarity: `{case.score:.2f}`*")
+                    st_module.markdown(f"**🩺 Retrieved consultation {idx}**")
+                    st_module.caption(f"Retrieval similarity: {case.score:.2f}")
                     st_module.text_area(
                         label=f"Case text {idx}",
                         value=case.text,
