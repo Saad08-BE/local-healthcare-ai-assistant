@@ -109,7 +109,11 @@ def run() -> None:
         st.markdown(
             """
             <div class="gemini-hero-container">
-                <div class="gemini-hero-title">Where should we start?</div>
+                <div class="gemini-hero-title">Your health questions, thoughtfully explored.</div>
+                <div class="gemini-hero-subtitle">
+                    Ask a general healthcare question or explore a medical PDF you have saved locally.
+                    HealthAI uses locally available evidence to help explain information, not to diagnose.
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -118,7 +122,10 @@ def run() -> None:
     else:
         # Render Conversation Message Thread
         for msg in current_session.messages:
-            with st.chat_message(msg["role"]):
+            with st.chat_message(
+                msg["role"],
+                avatar="✨" if msg["role"] == "assistant" else "🧑‍⚕️",
+            ):
                 st.markdown(msg["content"])
                 if "response" in msg and msg["response"] is not None:
                     render_evidence_panel(st, msg["response"])
@@ -190,13 +197,13 @@ def run() -> None:
 
         # Append user message
         current_session.add_message(role="user", content=query_to_run)
-        with st.chat_message("user"):
+        with st.chat_message("user", avatar="🧑‍⚕️"):
             st.markdown(query_to_run)
 
         # Run pipeline
         pipeline = get_pipeline(settings)
-        with st.chat_message("assistant"):
-            with st.spinner(f"Consulting local clinical evidence using `{sel_model}`..."):
+        with st.chat_message("assistant", avatar="✨"):
+            with st.spinner(f"Searching local evidence and preparing a grounded response with {sel_model}…"):
                 selected_pdf = st.session_state.get(
                     "active_pdf_for_questions", "Most relevant PDF (automatic)"
                 )
@@ -238,10 +245,10 @@ def run() -> None:
                 else "🟡 Offline Evidence Synthesis"
             )
             st.caption(
-                f"⏱️ Latency: `{response.total_latency_seconds:.2f}s` | "
-                f"Mode: {mode_badge} | "
-                f"Citations: `{len(response.document_sources)}` PDF doc(s), "
-                f"`{len(response.retrieved_cases)}` clinical case(s)"
+                f"⏱️ {response.total_latency_seconds:.2f}s  ·  "
+                f"{mode_badge}  ·  "
+                f"📄 {len(response.document_sources)} PDF source(s)  ·  "
+                f"🩺 {len(response.retrieved_cases)} clinical case(s)"
             )
 
             render_evidence_panel(st, response)
