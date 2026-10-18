@@ -5,7 +5,7 @@ import { Activity, AlertTriangle, ArrowUp, Check, ChevronDown, FileText, HeartPu
 import { api } from "./api";
 import type { ChatMessage, Conversation, HealthStatus, LocalDocument } from "./types";
 
-const makeId = () => crypto.randomUUID();
+const makeId = () => globalThis.crypto?.randomUUID?.() ?? "chat-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
 const createConversation = (): Conversation => ({ id: makeId(), title: "New chat", updatedAt: Date.now(), messages: [] });
 const suggestions = [
   { icon: "✳", title: "Understand a health topic", prompt: "Explain how blood pressure is measured and what the numbers mean." },
@@ -56,7 +56,21 @@ export default function App() {
     const timer = window.setInterval(() => { api.health().then((status) => { if (alive) setHealth(status); }).catch(() => { if (alive) setHealth(null); }); }, 15000);
     return () => { alive = false; window.clearInterval(timer); };
   }, []);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [active?.messages.length, busy]);
+  useEffect(() => { bottomRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" }); }, [active?.messages.length, busy]);
+  useEffect(() => {
+    const onShortcut = (event: globalThis.KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        const next = createConversation();
+        setConversations((current) => [next, ...current]);
+        setActiveId(next.id);
+        setDraft("");
+        setError("");
+      }
+    };
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  }, []);
 
   const updateConversation = (id: string, updater: (conversation: Conversation) => Conversation) => setConversations((current) => current.map((item) => item.id === id ? updater(item) : item));
   const newChat = () => {
