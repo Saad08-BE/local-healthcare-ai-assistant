@@ -11,3 +11,10 @@ data/
 vector_store/
 models/
 logs/
+
+# React/Vite development output
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.*.local
+frontend/*.tsbuildinfo

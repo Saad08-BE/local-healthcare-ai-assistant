@@ -212,3 +212,10 @@ This system is an **educational and academic research project** and is **not a c
 - It does not replace consultation with a qualified medical professional.
 - It intentionally restricts patient record lookups to safeguard privacy.
 - For emergency or acute symptoms, users must seek immediate emergency medical care.
+
+
+---
+
+## React + FastAPI migration (experimental)
+
+A local-only React frontend is being introduced alongside the existing Streamlit app. See [`MIGRATION_REACT_FASTAPI.md`](MIGRATION_REACT_FASTAPI.md) for setup instructions, architecture, local launch commands, tests, and current limitations. Streamlit remains supported while the new interface is verified.
