@@ -21,9 +21,12 @@ def render_sidebar_navigation(st_module, settings: AppSettings) -> dict[str, boo
     # 1. Header: Gemini Sparkle Icon + Title
     st_module.sidebar.markdown(
         """
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-            <span style="font-size: 1.4rem;">✨</span>
-            <span style="font-size: 1.15rem; font-weight: 600; color: #e3e3e3; letter-spacing: -0.01em;">HealthAI</span>
+        <div style="display:flex;align-items:center;gap:11px;margin:0 0 18px;padding:4px 2px 14px;border-bottom:1px solid rgba(226,232,240,.10);">
+            <span style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:14px;background:linear-gradient(145deg,#263b5b,#182536);border:1px solid rgba(155,188,255,.25);font-size:1.35rem;">✦</span>
+            <div>
+                <div style="font-size:1.08rem;font-weight:700;color:#eef4ff;letter-spacing:-.025em;">HealthAI</div>
+                <div style="font-size:.72rem;color:#92a1b5;margin-top:2px;">Private healthcare assistant</div>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -41,7 +44,7 @@ def render_sidebar_navigation(st_module, settings: AppSettings) -> dict[str, boo
 
     # 3. Searchable Consultations List
     st_module.sidebar.markdown(
-        "<p style='font-size: 0.8rem; font-weight: 500; color: #80868b; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;'>Recent</p>",
+        "<p style='font-size:.72rem;font-weight:650;color:#8e9db1;margin:10px 0 8px;text-transform:uppercase;letter-spacing:.12em;'>Your conversations</p>",
         unsafe_allow_html=True,
     )
 
@@ -70,7 +73,7 @@ def render_sidebar_navigation(st_module, settings: AppSettings) -> dict[str, boo
         if search_query:
             st_module.sidebar.caption("No matching consultations.")
         else:
-            st_module.sidebar.caption("No past chats yet.")
+            st_module.sidebar.caption("Your conversations will appear here after your first question.")
     else:
         for sid, s in matching_sessions:
             is_active = (sid == st_module.session_state.active_session_id and not st_module.session_state.temp_mode)
