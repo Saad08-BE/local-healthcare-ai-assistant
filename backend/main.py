@@ -136,7 +136,7 @@ def chat(request: ChatRequest) -> ChatResponse:
     if not model or len(model) > 160:
         raise HTTPException(status_code=422, detail="Choose a valid local model.")
     installed = _installed_models()
-    if installed and model not in installed:
+    if installed and not any(name == model or name.startswith(model + "-") for name in installed):
         raise HTTPException(status_code=400, detail="Choose a model installed in local Ollama.")
     document_filename = request.document_filename
     if document_filename and document_filename not in {"__all__", "__most_relevant__"}:
