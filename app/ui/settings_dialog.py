@@ -29,14 +29,23 @@ def render_settings_dialog(st_module, settings: AppSettings) -> None:
     index_files = list(vector_dir.glob("*.json*")) if vector_dir.exists() else []
     total_index_mb = sum(f.stat().st_size for f in index_files) / (1024 * 1024)
 
-    st_module.markdown("### ⚙️ System Settings & Diagnostic Metrics")
-    st_module.caption("100% Local Apple Silicon Architecture • Loopback Bound")
+    st_module.markdown("### ⚙️ Settings & system health")
+    st_module.caption("A quick overview of the services and local resources used by HealthAI.")
+    st_module.markdown(
+        '<div style="padding:12px 15px;border:1px solid rgba(155,188,255,.18);'
+        'background:rgba(125,166,255,.055);border-radius:13px;margin:10px 0 16px;">'
+        '<span style="font-weight:600;color:#c7d9ff;">🔐 Local-first design</span><br>'
+        '<span style="font-size:.88rem;color:#a9b8cc;">Your documents and local model are managed on this computer. '
+        'Check the configured endpoint and local services below.</span></div>',
+        unsafe_allow_html=True,
+    )
 
     st_module.divider()
 
     col1, col2 = st_module.columns(2)
     with col1:
-        st_module.markdown("#### 🩺 Local Services")
+        st_module.markdown("#### 🩺 Local services")
+        st_module.markdown("**Model connection**")
         if ollama_online:
             st_module.success("🟢 Local Ollama Daemon: **Active**")
         else:
@@ -47,7 +56,8 @@ def render_settings_dialog(st_module, settings: AppSettings) -> None:
         st_module.write(f"- **Installed Local Models:** `{', '.join(models_available) if models_available else 'None detected'}`")
 
     with col2:
-        st_module.markdown("#### 📊 Vector Store & Ingestion")
+        st_module.markdown("#### 📚 Documents & search")
+        st_module.markdown("**Local index**")
         st_module.metric("Indexed Local PDFs", f"{pdf_count} document(s)")
         st_module.metric("Vector Index Footprint", f"{total_index_mb:.2f} MB")
         st_module.write(f"- **Embedding Model:** `{settings.embedding_model}`")
@@ -58,7 +68,7 @@ def render_settings_dialog(st_module, settings: AppSettings) -> None:
 
     st_module.markdown("#### 🔒 Privacy & Local Security Status")
     st_module.info(
-        "• All patient queries, vector embeddings, and PDF documents are strictly retained in project-local storage.\n"
-        "• Loopback host validation enforces zero external network calls.\n"
-        "• Patient identifiers (`Patient_ID`) are removed before indexing to guarantee HIPAA compliance."
+        "• Uploaded PDFs and the search index are stored in project-local folders.\n"
+        "• The application is configured for a local Ollama endpoint; verify the endpoint and network settings on your machine.\n"
+        "• Privacy safeguards are intended for this academic project and do not constitute a certification or guarantee of regulatory compliance."
     )
