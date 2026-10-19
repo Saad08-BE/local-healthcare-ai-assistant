@@ -45,6 +45,12 @@ class AuthenticationApiTests(unittest.TestCase):
         self.assertEqual(me.status_code, 200)
         self.assertEqual(me.json()["user"]["email"], "person@example.com")
 
+    def test_openapi_documents_csrf_header_for_registration(self) -> None:
+        schema = self.client.get("/openapi.json").json()
+        operation = schema["paths"]["/api/auth/register"]["post"]
+        headers = [item["name"] for item in operation.get("parameters", []) if item["in"] == "header"]
+        self.assertIn("X-CSRF-Token", headers)
+
     def test_registration_requires_csrf_header(self) -> None:
         response = self.client.post(
             "/api/auth/register",
