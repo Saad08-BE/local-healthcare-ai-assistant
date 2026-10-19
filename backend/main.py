@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -14,7 +15,8 @@ from app.config.settings import AppSettings
 from app.llm.ollama_client import LocalServiceUnavailable, OllamaClient
 from app.llm.rag_pipeline import HealthcareRAGPipeline
 from app.ui.input_controls import delete_saved_pdf, list_saved_pdfs, save_and_index_pdf
-from backend.auth import router as auth_router
+from backend.auth import _current_user, _require_csrf, router as auth_router
+from backend.database import database_connection, initialize_database
 from backend.conversations import router as conversations_router
 
 logger = logging.getLogger("healthai.api")
@@ -40,6 +42,7 @@ class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=MAX_QUERY_CHARS)
     model: str | None = Field(default=None, max_length=160)
     document_filename: str | None = Field(default=None, max_length=255)
+    conversation_id: str | None = Field(default=None, max_length=80)
 
 
 class ChatResponse(BaseModel):
@@ -132,8 +135,20 @@ def remove_document(filename: str) -> dict:
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-def chat(request: ChatRequest) -> ChatResponse:
+def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
     question = request.question.strip()
+    user = None
+    if request.conversation_id:
+        _require_csrf(http_request, http_request.headers.get("x-csrf-token"))
+        user = _current_user(http_request)
+        initialize_database()
+        with database_connection() as connection:
+            owned = connection.execute(
+                "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
+                (request.conversation_id, user["id"]),
+            ).fetchone()
+        if owned is None:
+            raise HTTPException(status_code=404, detail="Conversation not found.")
     if not question:
         raise HTTPException(status_code=422, detail="Enter a question before sending.")
     model = (request.model or settings.llm_model).strip()
@@ -153,7 +168,7 @@ def chat(request: ChatRequest) -> ChatResponse:
     except Exception as exc:
         logger.exception("Local RAG request failed (%s).", type(exc).__name__)
         raise HTTPException(status_code=500, detail="HealthAI could not complete this request. Check local services and application logs.") from exc
-    return ChatResponse(
+    response = ChatResponse(
         question=result.question, answer=result.answer, model=result.llm_model,
         offline_fallback=result.is_offline_fallback, urgent_warning=result.urgent_warning,
         latency_seconds=result.total_latency_seconds, disclaimer=result.disclaimer,
@@ -161,3 +176,25 @@ def chat(request: ChatRequest) -> ChatResponse:
         retrieved_cases=[{"score": item.score, "text": item.text} for item in result.retrieved_cases],
         cohort_statistics=result.cohort_statistics,
     )
+    if user is not None and request.conversation_id:
+        metadata = json.dumps({
+            "model": result.llm_model,
+            "document_sources": [{"citation": item.citation, "score": item.score, "text": item.text} for item in result.document_sources],
+            "urgent_warning": result.urgent_warning,
+        })
+        with database_connection() as connection:
+            connection.execute(
+                "INSERT INTO messages(conversation_id, role, content) VALUES (?, ?, ?)",
+                (request.conversation_id, "user", question),
+            )
+            connection.execute(
+                "INSERT INTO messages(conversation_id, role, content, metadata_json) VALUES (?, ?, ?, ?)",
+                (request.conversation_id, "assistant", result.answer, metadata),
+            )
+            connection.execute(
+                """UPDATE conversations SET updated_at = CURRENT_TIMESTAMP,
+                   title = CASE WHEN title = 'New chat' THEN ? ELSE title END
+                   WHERE id = ? AND user_id = ?""",
+                (question[:80] or "New chat", request.conversation_id, user["id"]),
+            )
+    return response
