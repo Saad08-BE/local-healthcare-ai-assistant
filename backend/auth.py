@@ -59,7 +59,7 @@ def _password_hash(password: str) -> str:
         p=SCRYPT_P,
         dklen=64,
     )
-    return f"scrypt$\{SCRYPT_N}$\{SCRYPT_R}$\{SCRYPT_P}$\{salt.hex()}$\{derived.hex()}"
+    return "scrypt${}${}${}${}${}".format(SCRYPT_N, SCRYPT_R, SCRYPT_P, salt.hex(), derived.hex())
 
 
 def _verify_password(password: str, stored_hash: str) -> bool:
