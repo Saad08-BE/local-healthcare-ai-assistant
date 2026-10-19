@@ -15,6 +15,7 @@ from app.llm.ollama_client import LocalServiceUnavailable, OllamaClient
 from app.llm.rag_pipeline import HealthcareRAGPipeline
 from app.ui.input_controls import delete_saved_pdf, list_saved_pdfs, save_and_index_pdf
 from backend.auth import router as auth_router
+from backend.conversations import router as conversations_router
 
 logger = logging.getLogger("healthai.api")
 settings = AppSettings.from_environment()
@@ -30,6 +31,7 @@ app.add_middleware(
 _pipeline: HealthcareRAGPipeline | None = None
 _pipeline_lock = threading.Lock()
 app.include_router(auth_router)
+app.include_router(conversations_router)
 MAX_PDF_BYTES = 20 * 1024 * 1024
 MAX_QUERY_CHARS = 4000
 
