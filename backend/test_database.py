@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from backend.database import get_connection, initialize_database
+from backend.database import database_connection, initialize_database
 
 
 class DatabaseFoundationTests(unittest.TestCase):
@@ -18,7 +18,7 @@ class DatabaseFoundationTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_initialization_creates_expected_tables(self) -> None:
-        with get_connection(self.database_path) as connection:
+        with database_connection(self.database_path) as connection:
             names = {
                 row["name"]
                 for row in connection.execute(
@@ -38,12 +38,12 @@ class DatabaseFoundationTests(unittest.TestCase):
         )
 
     def test_foreign_keys_are_enabled(self) -> None:
-        with get_connection(self.database_path) as connection:
+        with database_connection(self.database_path) as connection:
             enabled = connection.execute("PRAGMA foreign_keys").fetchone()[0]
         self.assertEqual(enabled, 1)
 
     def test_document_must_belong_to_its_conversation_owner(self) -> None:
-        with get_connection(self.database_path) as connection:
+        with database_connection(self.database_path) as connection:
             user_id = connection.execute(
                 "INSERT INTO users(email, password_hash) VALUES (?, ?)",
                 ("person@example.com", "test-hash-not-a-real-password"),
@@ -74,7 +74,7 @@ class DatabaseFoundationTests(unittest.TestCase):
                 )
 
     def test_deleting_conversation_cascades_to_messages_documents_and_chunks(self) -> None:
-        with get_connection(self.database_path) as connection:
+        with database_connection(self.database_path) as connection:
             user_id = connection.execute(
                 "INSERT INTO users(email, password_hash) VALUES (?, ?)",
                 ("person@example.com", "test-hash"),
@@ -122,7 +122,7 @@ class DatabaseFoundationTests(unittest.TestCase):
                 self.assertEqual(count, 0, f"{table} should cascade on chat deletion")
 
     def test_email_is_unique_without_case_sensitivity(self) -> None:
-        with get_connection(self.database_path) as connection:
+        with database_connection(self.database_path) as connection:
             connection.execute(
                 "INSERT INTO users(email, password_hash) VALUES (?, ?)",
                 ("person@example.com", "test-hash"),
