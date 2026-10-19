@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from backend.auth import _current_user, _require_csrf
@@ -49,8 +49,12 @@ def list_conversations(request: Request) -> dict:
 
 
 @router.post("", status_code=201)
-def create_conversation(payload: CreateConversationRequest, request: Request) -> dict:
-    _require_csrf(request, request.headers.get("x-csrf-token"))
+def create_conversation(
+    payload: CreateConversationRequest,
+    request: Request,
+    csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
+) -> dict:
+    _require_csrf(request, csrf_token)
     user = _current_user(request)
     initialize_database()
     conversation_id = str(uuid.uuid4())
@@ -96,8 +100,12 @@ def get_conversation(conversation_id: str, request: Request) -> dict:
 
 
 @router.delete("/{conversation_id}")
-def delete_conversation(conversation_id: str, request: Request) -> dict:
-    _require_csrf(request, request.headers.get("x-csrf-token"))
+def delete_conversation(
+    conversation_id: str,
+    request: Request,
+    csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
+) -> dict:
+    _require_csrf(request, csrf_token)
     user = _current_user(request)
     initialize_database()
     with database_connection() as connection:
