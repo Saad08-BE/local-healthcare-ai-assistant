@@ -7,7 +7,7 @@ import logging
 import threading
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -135,11 +135,15 @@ def remove_document(filename: str) -> dict:
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
+def chat(
+    request: ChatRequest,
+    http_request: Request,
+    csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
+) -> ChatResponse:
     question = request.question.strip()
     user = None
     if request.conversation_id:
-        _require_csrf(http_request, http_request.headers.get("x-csrf-token"))
+        _require_csrf(http_request, csrf_token)
         user = _current_user(http_request)
         initialize_database()
         with database_connection() as connection:
