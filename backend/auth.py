@@ -14,7 +14,7 @@ import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from backend.database import database_connection, initialize_database
@@ -166,8 +166,13 @@ def get_csrf_token(response: Response) -> dict:
 
 
 @router.post("/register", status_code=201)
-def register(credentials: Credentials, request: Request, response: Response) -> dict:
-    _require_csrf(request, request.headers.get("x-csrf-token"))
+def register(
+    credentials: Credentials,
+    request: Request,
+    response: Response,
+    csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
+) -> dict:
+    _require_csrf(request, csrf_token)
     email = _normalise_email(credentials.email)
     initialize_database()
     password_hash = _password_hash(credentials.password)
@@ -187,8 +192,13 @@ def register(credentials: Credentials, request: Request, response: Response) -> 
 
 
 @router.post("/login")
-def login(credentials: Credentials, request: Request, response: Response) -> dict:
-    _require_csrf(request, request.headers.get("x-csrf-token"))
+def login(
+    credentials: Credentials,
+    request: Request,
+    response: Response,
+    csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
+) -> dict:
+    _require_csrf(request, csrf_token)
     email = _normalise_email(credentials.email)
     initialize_database()
     with database_connection() as connection:
@@ -212,8 +222,12 @@ def who_am_i(request: Request) -> dict:
 
 
 @router.post("/logout")
-def logout(request: Request, response: Response) -> dict:
-    _require_csrf(request, request.headers.get("x-csrf-token"))
+def logout(
+    request: Request,
+    response: Response,
+    csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
+) -> dict:
+    _require_csrf(request, csrf_token)
     token = request.cookies.get(SESSION_COOKIE)
     if token:
         initialize_database()
