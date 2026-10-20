@@ -95,6 +95,7 @@ class HealthcareRAGPipeline:
         document_filename: str | None = None,
         document_retriever_override: DocumentRetriever | None = None,
         document_id: str | None = None,
+        conversation_context: str | None = None,
     ) -> RAGResponse:
         """Run full unified RAG pipeline for a user question.
 
@@ -126,9 +127,15 @@ class HealthcareRAGPipeline:
                 safety_decision=safety,
             )
 
+        # Keep the current question as the safety-checked user input, while using
+        # recent conversation context to resolve follow-up references during retrieval.
+        retrieval_query = question
+        if conversation_context:
+            retrieval_query = f"{question}\\nRecent conversation context: {conversation_context}"
+
         # --- 2. Dataset Hybrid Retrieval ---
         context: RetrievalContext = self.retriever.retrieve_context(
-            query=question,
+            query=retrieval_query,
             top_k=self.settings.top_k,
             min_similarity=self.settings.similarity_threshold,
         )
@@ -155,7 +162,7 @@ class HealthcareRAGPipeline:
         )
         active_document_retriever = document_retriever_override or self.document_retriever
         doc_results: list[DocumentSearchResult] = active_document_retriever.search(
-            query=question,
+            query=retrieval_query,
             top_k=4,
             min_similarity=document_threshold,
             filename=document_filename,
@@ -164,9 +171,16 @@ class HealthcareRAGPipeline:
         document_context_block = _build_document_context_block(doc_results)
 
         # --- 4. Unified Prompt Construction ---
+        evidence_context_block = context.formatted_context_block
+        if conversation_context:
+            evidence_context_block += (
+                "\\n\\n--- RECENT CONVERSATION CONTEXT (for resolving follow-ups; not verified evidence) ---\\n"
+                + conversation_context
+                + "\\n--- END CONVERSATION CONTEXT ---"
+            )
         grounded_prompt = build_grounded_prompt(
             question=question,
-            evidence_context_block=context.formatted_context_block,
+            evidence_context_block=evidence_context_block,
             document_context_block=document_context_block if doc_results else None,
         )
 
