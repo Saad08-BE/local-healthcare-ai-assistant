@@ -190,6 +190,18 @@ def chat(
             raise HTTPException(status_code=404, detail="The selected report is not in this conversation.")
         document_id = selected["id"]
 
+    with database_connection() as connection:
+        history_rows = connection.execute(
+            """SELECT role, content FROM messages
+               WHERE conversation_id = ? AND role IN ('user', 'assistant')
+               ORDER BY id DESC LIMIT 8""",
+            (request.conversation_id,),
+        ).fetchall()
+    conversation_context = "\\n".join(
+        f"{row['role']}: {row['content'][:800]}"
+        for row in reversed(history_rows)
+    )[-4000:]
+
     try:
         pipeline = get_pipeline()
         private_retriever = conversation_document_retriever(user["id"], request.conversation_id)
@@ -199,6 +211,7 @@ def chat(
             document_filename=document_filename,
             document_retriever_override=private_retriever,
             document_id=document_id,
+            conversation_context=conversation_context or None,
         )
     except HTTPException:
         raise
