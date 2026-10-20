@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from backend.auth import _current_user, _require_csrf
 from backend.database import database_connection, initialize_database
+from backend.conversation_documents import delete_conversation_storage
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -114,4 +115,5 @@ def delete_conversation(
             "DELETE FROM conversations WHERE id = ? AND user_id = ?",
             (conversation_id, user["id"]),
         )
+    delete_conversation_storage(user["id"], conversation_id)
     return {"deleted": True, "conversation_id": conversation_id}
