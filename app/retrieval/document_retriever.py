@@ -125,10 +125,10 @@ class DocumentRetriever:
         )
 
         if automatic_document and raw_results:
-            best_filename = raw_results[0].metadata.get("filename")
+            best_document_id = raw_results[0].metadata.get("doc_id")
             raw_results = [
                 result for result in raw_results
-                if result.metadata.get("filename") == best_filename
+                if result.metadata.get("doc_id") == best_document_id
             ][:top_k]
         elif filename == "__all__":
             raw_results = raw_results[:top_k]
