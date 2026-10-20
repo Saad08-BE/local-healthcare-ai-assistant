@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Activity, AlertTriangle, ArrowUp, Check, ChevronDown, FileText, HeartPulse, LoaderCircle, Menu, MessageSquare, PanelLeftClose, Plus, Search, Settings2, ShieldCheck, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUp, Check, ChevronDown, FileText, HeartPulse, LoaderCircle, Menu, MessageSquare, PanelLeftClose, Plus, Search, Settings2, ShieldCheck, Sparkles, Trash2, Upload, X, MoreHorizontal, Pin, PinOff, Pencil, Share2 } from "lucide-react";
 import { api } from "./api";
 import type { ChatMessage, Conversation, HealthStatus, LocalDocument } from "./types";
 
@@ -24,6 +24,7 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState("");
+  const [openMenuId, setOpenMenuId] = useState("");
   const [model, setModel] = useState("qwen2.5:3b");
   const [models, setModels] = useState<string[]>(["qwen2.5:3b"]);
   const [documents, setDocuments] = useState<LocalDocument[]>([]);
@@ -41,7 +42,7 @@ export default function App() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const workspaceLoadRef = useRef<Promise<void> | null>(null);
   const active = conversations.find((item) => item.id === activeId) ?? conversations[0];
-  const filteredConversations = useMemo(() => conversations.filter((item) => item.title.toLowerCase().includes(search.toLowerCase().trim())).sort((a, b) => b.updatedAt - a.updatedAt), [conversations, search]);
+  const filteredConversations = useMemo(() => conversations.filter((item) => item.title.toLowerCase().includes(search.toLowerCase().trim())).sort((a, b) => Number(b.isPinned) - Number(a.isPinned) || b.updatedAt - a.updatedAt), [conversations, search]);
 
   const refreshDocuments = useCallback(async (conversationId: string) => {
     try {
@@ -123,7 +124,52 @@ export default function App() {
       window.setTimeout(() => textareaRef.current?.focus(), 0);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not create a conversation."); }
   };
+  const renameConversation = async (conversation: Conversation) => {
+    setOpenMenuId("");
+    const requested = window.prompt("Rename conversation", conversation.title);
+    if (requested === null) return;
+    const title = requested.trim();
+    if (!title) { setError("Conversation title cannot be empty."); return; }
+    if (title.length > 120) { setError("Conversation titles must be 120 characters or fewer."); return; }
+    try {
+      const updated = await api.updateConversation(conversation.id, { title });
+      updateConversation(conversation.id, (item) => ({ ...item, title: updated.title }));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not rename this conversation."); }
+  };
+  const togglePinned = async (conversation: Conversation) => {
+    setOpenMenuId("");
+    try {
+      const updated = await api.updateConversation(conversation.id, { is_pinned: !conversation.isPinned });
+      updateConversation(conversation.id, (item) => ({ ...item, isPinned: updated.isPinned }));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not update the pin state."); }
+  };
+  const shareConversation = async (conversation: Conversation) => {
+    setOpenMenuId("");
+    const transcript = conversation.messages.map((message) => (message.role === "user" ? "You" : "HealthAI") + ":\\n" + message.content).join("\\n\\n");
+    const shareText = "HealthAI conversation: " + conversation.title + "\\n\\n" + (transcript || "This conversation has no messages yet.");
+    try {
+      if (typeof navigator.share === "function") {
+        await navigator.share({ title: conversation.title, text: shareText });
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareText);
+        window.alert("Conversation copied to your clipboard. You can now paste it into a message.");
+      } else {
+        window.prompt("Copy this conversation text to share it:", shareText);
+      }
+    } catch (reason) {
+      if (reason instanceof Error && reason.name === "AbortError") return;
+      try {
+        await navigator.clipboard.writeText(shareText);
+        window.alert("Conversation copied to your clipboard. You can now paste it into a message.");
+      } catch {
+        setError("Could not share this conversation from this browser.");
+      }
+    }
+  };
   const removeConversation = async (id: string) => {
+    const target = conversations.find((item) => item.id === id);
+    if (!target || !window.confirm('Delete "' + target.title + '" and its conversation-specific reports? This cannot be undone.')) return;
+    setOpenMenuId("");
     try {
       await api.deleteConversation(id);
       const remaining = await api.conversations();
@@ -196,7 +242,7 @@ export default function App() {
       <button className="new-chat-button" onClick={newChat}><Plus size={18} /><span>New chat</span><span className="shortcut">⌘ K</span></button>
       <label className="search-box"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search conversations" aria-label="Search conversations" />{search && <button type="button" className="search-clear" aria-label="Clear search" onClick={() => setSearch("")}><X size={14} /></button>}</label>
       <div className="sidebar-section-label">Recent</div>
-      <nav className="conversation-list" aria-label="Recent conversations">{filteredConversations.length === 0 && <p className="empty-history">No matching conversations.</p>}{filteredConversations.map((conversation) => <div className={"conversation-item " + (conversation.id === activeId ? "conversation-active" : "")} key={conversation.id}><button className="conversation-select" onClick={() => { setActiveId(conversation.id); setMobileSidebarOpen(false); }}><MessageSquare size={15} /><span>{conversation.title}</span></button><button className="conversation-delete" aria-label={"Delete " + conversation.title} title="Delete conversation" onClick={() => removeConversation(conversation.id)}><Trash2 size={14} /></button></div>)}</nav>
+      <nav className="conversation-list" aria-label="Recent conversations">{filteredConversations.length === 0 && <p className="empty-history">No matching conversations.</p>}{filteredConversations.map((conversation) => <div className={"conversation-item " + (conversation.id === activeId ? "conversation-active" : "")} key={conversation.id}><button className="conversation-select" onClick={() => { setActiveId(conversation.id); setOpenMenuId(""); setMobileSidebarOpen(false); }}><MessageSquare size={15} />{conversation.isPinned && <Pin size={12} className="conversation-pin-indicator" aria-label="Pinned" />}<span>{conversation.title}</span></button><button type="button" className="conversation-more-button" aria-label={"Actions for " + conversation.title} title="Conversation actions" aria-haspopup="menu" aria-expanded={openMenuId === conversation.id} onClick={() => setOpenMenuId((current) => current === conversation.id ? "" : conversation.id)}><MoreHorizontal size={17} /></button>{openMenuId === conversation.id && <div className="conversation-menu" role="menu" aria-label={"Actions for " + conversation.title}><button type="button" role="menuitem" onClick={() => void shareConversation(conversation)}><Share2 size={14} />Share conversation</button><button type="button" role="menuitem" onClick={() => void togglePinned(conversation)}>{conversation.isPinned ? <PinOff size={14} /> : <Pin size={14} />}{conversation.isPinned ? "Unpin conversation" : "Pin conversation"}</button><button type="button" role="menuitem" onClick={() => void renameConversation(conversation)}><Pencil size={14} />Rename</button><div className="conversation-menu-divider" /><button type="button" role="menuitem" className="conversation-menu-delete" onClick={() => void removeConversation(conversation.id)}><Trash2 size={14} />Delete</button></div>}</div>)}</nav>
       <div className="sidebar-bottom">
         <button className={"sidebar-action " + (documentsOpen ? "sidebar-action-active" : "")} onClick={() => setDocumentsOpen((open) => !open)}><FileText size={17} /><span>Conversation reports</span><span className="count-pill">{documents.length}</span></button>
         {documentsOpen && <div className="document-library"><div className="document-library-heading">Reports in this conversation</div>{documents.length === 0 ? <p className="document-empty">No PDFs yet. Add one to ask questions about its contents.</p> : documents.map((document) => <div className="document-row" key={document.filename}><FileText size={15} /><button className="document-name" title={document.filename} onClick={() => setDocumentChoice(document.id)}>{document.filename}</button><button className="icon-button document-delete" aria-label={"Delete " + document.filename} onClick={() => void deleteDocument(document.id, document.filename)}><Trash2 size={13} /></button></div>)}<button className="upload-library-button" onClick={() => fileRef.current?.click()}><Upload size={14} /> Add a PDF</button></div>}
