@@ -26,6 +26,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [openMenuId, setOpenMenuId] = useState("");
   const [conversationMenuPosition, setConversationMenuPosition] = useState({ top: 8, left: 8 });
+  const conversationMenuRef = useRef<HTMLDivElement | null>(null);
   const [model, setModel] = useState("qwen2.5:3b");
   const [models, setModels] = useState<string[]>(["qwen2.5:3b"]);
   const [documents, setDocuments] = useState<LocalDocument[]>([]);
@@ -69,6 +70,26 @@ export default function App() {
     workspaceLoadRef.current = task;
     try { await task; } finally { workspaceLoadRef.current = null; }
   }, []);
+
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handleOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (conversationMenuRef.current?.contains(target)) return;
+      if (target instanceof Element && target.closest(".conversation-more-button")) return;
+      setOpenMenuId("");
+    };
+    const handleEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setOpenMenuId("");
+    };
+    document.addEventListener("pointerdown", handleOutsidePointer);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsidePointer);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [openMenuId]);
 
   useEffect(() => {
     let alive = true;
@@ -253,7 +274,7 @@ export default function App() {
       <button className="new-chat-button" onClick={newChat}><Plus size={18} /><span>New chat</span><span className="shortcut">⌘ K</span></button>
       <label className="search-box"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search conversations" aria-label="Search conversations" />{search && <button type="button" className="search-clear" aria-label="Clear search" onClick={() => setSearch("")}><X size={14} /></button>}</label>
       <div className="sidebar-section-label">Recent</div>
-      <nav className="conversation-list" aria-label="Recent conversations">{filteredConversations.length === 0 && <p className="empty-history">No matching conversations.</p>}{filteredConversations.map((conversation) => <div className={"conversation-item " + (conversation.id === activeId ? "conversation-active" : "")} key={conversation.id}><button className="conversation-select" onClick={() => { setActiveId(conversation.id); setOpenMenuId(""); setMobileSidebarOpen(false); }}><MessageSquare size={15} />{conversation.isPinned && <Pin size={12} className="conversation-pin-indicator" aria-label="Pinned" />}<span>{conversation.title}</span></button><button type="button" className="conversation-more-button" aria-label={"Actions for " + conversation.title} title="Conversation actions" aria-haspopup="menu" aria-expanded={openMenuId === conversation.id} onClick={(event) => { if (openMenuId === conversation.id) { setOpenMenuId(""); return; } const rect = event.currentTarget.getBoundingClientRect(); setConversationMenuPosition({ top: Math.max(8, Math.min(rect.top - 66, window.innerHeight - 170)), left: Math.max(8, Math.min(rect.right + 8, window.innerWidth - 198)) }); setOpenMenuId(conversation.id); }}><MoreHorizontal size={17} /></button>{openMenuId === conversation.id && <div className="conversation-menu" style={{ top: conversationMenuPosition.top, left: conversationMenuPosition.left }} role="menu" aria-label={"Actions for " + conversation.title}><button type="button" role="menuitem" onClick={() => void shareConversation(conversation)}><Share2 size={14} />Share conversation</button><button type="button" role="menuitem" onClick={() => void togglePinned(conversation)}>{conversation.isPinned ? <PinOff size={14} /> : <Pin size={14} />}{conversation.isPinned ? "Unpin conversation" : "Pin conversation"}</button><button type="button" role="menuitem" onClick={() => void renameConversation(conversation)}><Pencil size={14} />Rename</button><div className="conversation-menu-divider" /><button type="button" role="menuitem" className="conversation-menu-delete" onClick={() => void removeConversation(conversation.id)}><Trash2 size={14} />Delete</button></div>}</div>)}</nav>
+      <nav className="conversation-list" aria-label="Recent conversations">{filteredConversations.length === 0 && <p className="empty-history">No matching conversations.</p>}{filteredConversations.map((conversation) => <div className={"conversation-item " + (conversation.id === activeId ? "conversation-active" : "")} key={conversation.id}><button className="conversation-select" onClick={() => { setActiveId(conversation.id); setOpenMenuId(""); setMobileSidebarOpen(false); }}><MessageSquare size={15} />{conversation.isPinned && <Pin size={12} className="conversation-pin-indicator" aria-label="Pinned" />}<span>{conversation.title}</span></button><button type="button" className="conversation-more-button" aria-label={"Actions for " + conversation.title} title="Conversation actions" aria-haspopup="menu" aria-expanded={openMenuId === conversation.id} onClick={(event) => { if (openMenuId === conversation.id) { setOpenMenuId(""); return; } const rect = event.currentTarget.getBoundingClientRect(); setConversationMenuPosition({ top: Math.max(8, Math.min(rect.top - 66, window.innerHeight - 170)), left: Math.max(8, Math.min(rect.right + 8, window.innerWidth - 198)) }); setOpenMenuId(conversation.id); }}><MoreHorizontal size={17} /></button>{openMenuId === conversation.id && <div ref={conversationMenuRef} className="conversation-menu" style={{ top: conversationMenuPosition.top, left: conversationMenuPosition.left }} role="menu" aria-label={"Actions for " + conversation.title}><button type="button" role="menuitem" onClick={() => void shareConversation(conversation)}><Share2 size={14} />Share conversation</button><button type="button" role="menuitem" onClick={() => void togglePinned(conversation)}>{conversation.isPinned ? <PinOff size={14} /> : <Pin size={14} />}{conversation.isPinned ? "Unpin conversation" : "Pin conversation"}</button><button type="button" role="menuitem" onClick={() => void renameConversation(conversation)}><Pencil size={14} />Rename</button><div className="conversation-menu-divider" /><button type="button" role="menuitem" className="conversation-menu-delete" onClick={() => void removeConversation(conversation.id)}><Trash2 size={14} />Delete</button></div>}</div>)}</nav>
       <div className="sidebar-bottom">
         <button className={"sidebar-action " + (documentsOpen ? "sidebar-action-active" : "")} onClick={() => setDocumentsOpen((open) => !open)}><FileText size={17} /><span>Conversation reports</span><span className="count-pill">{documents.length}</span></button>
         {documentsOpen && <div className="document-library"><div className="document-library-heading">Reports in this conversation</div>{documents.length === 0 ? <p className="document-empty">No PDFs yet. Add one to ask questions about its contents.</p> : documents.map((document) => <div className="document-row" key={document.filename}><FileText size={15} /><button className="document-name" title={document.filename} onClick={() => setDocumentChoice(document.id)}>{document.filename}</button><button className="icon-button document-delete" aria-label={"Delete " + document.filename} onClick={() => void deleteDocument(document.id, document.filename)}><Trash2 size={13} /></button></div>)}<button className="upload-library-button" onClick={() => fileRef.current?.click()}><Upload size={14} /> Add a PDF</button></div>}
