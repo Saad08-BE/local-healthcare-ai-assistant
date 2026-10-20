@@ -6,7 +6,6 @@ import { api } from "./api";
 import type { ChatMessage, Conversation, HealthStatus, LocalDocument } from "./types";
 
 const makeId = () => globalThis.crypto?.randomUUID?.() ?? "chat-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
-const createConversation = (): Conversation => ({ id: makeId(), title: "New chat", updatedAt: Date.now(), messages: [] });
 const suggestions = [
   { icon: "✳", title: "Understand a health topic", prompt: "Explain how blood pressure is measured and what the numbers mean." },
   { icon: "▤", title: "Explore a medical PDF", prompt: "What is the main purpose of the medical document I selected?" },
@@ -16,9 +15,13 @@ function makeMessage(role: ChatMessage["role"], content: string, extra: Partial<
   return { id: makeId(), role, content, createdAt: Date.now(), ...extra };
 }
 export default function App() {
-  const [initialConversation] = useState<Conversation>(() => createConversation());
-  const [conversations, setConversations] = useState<Conversation[]>([initialConversation]);
-  const [activeId, setActiveId] = useState(initialConversation.id);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeId, setActiveId] = useState("");
+  const [user, setUser] = useState<{ id: number; email: string } | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState("");
   const [model, setModel] = useState("qwen2.5:3b");
@@ -36,52 +39,115 @@ export default function App() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const workspaceLoadRef = useRef<Promise<void> | null>(null);
   const active = conversations.find((item) => item.id === activeId) ?? conversations[0];
   const filteredConversations = useMemo(() => conversations.filter((item) => item.title.toLowerCase().includes(search.toLowerCase().trim())).sort((a, b) => b.updatedAt - a.updatedAt), [conversations, search]);
 
-  const refreshDocuments = useCallback(async () => {
+  const refreshDocuments = useCallback(async (conversationId: string) => {
     try {
-      const response = await api.documents();
+      const response = await api.documents(conversationId);
       setDocuments(response.documents);
-      setDocumentChoice((current) => current !== "__all__" && current !== "__most_relevant__" && !response.documents.some((doc) => doc.filename === current) ? "__most_relevant__" : current);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load local documents."); }
+      setDocumentChoice((current) => current !== "__all__" && current !== "__most_relevant__" && !response.documents.some((doc) => doc.id === current) ? "__most_relevant__" : current);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load this conversation's reports."); }
+  }, []);
+
+  const loadWorkspace = useCallback(async () => {
+    if (workspaceLoadRef.current) return workspaceLoadRef.current;
+    const task = (async () => {
+      const existing = await api.conversations();
+      if (existing.length === 0) {
+        const created = await api.createConversation();
+        setConversations([created]);
+        setActiveId(created.id);
+      } else {
+        setConversations(existing);
+        setActiveId(existing[0].id);
+      }
+    })();
+    workspaceLoadRef.current = task;
+    try { await task; } finally { workspaceLoadRef.current = null; }
   }, []);
 
   useEffect(() => {
     let alive = true;
-    Promise.all([api.health(), api.models(), api.documents()]).then(([status, modelInfo, documentInfo]) => {
+    Promise.all([api.health(), api.models()]).then(([status, modelInfo]) => {
       if (!alive) return;
-      setHealth(status); setModels(modelInfo.models.length ? modelInfo.models : [modelInfo.default_model]); setModel(modelInfo.default_model); setDocuments(documentInfo.documents);
+      setHealth(status); setModels(modelInfo.models.length ? modelInfo.models : [modelInfo.default_model]); setModel(modelInfo.default_model);
     }).catch((reason: unknown) => { if (alive) setError(reason instanceof Error ? reason.message : "The local API is unavailable."); });
+    api.csrf().then(() => api.me()).then(async ({ user: currentUser }) => {
+      if (!alive) return;
+      setUser(currentUser);
+      await loadWorkspace();
+    }).catch(() => { if (alive) setUser(null); }).finally(() => { if (alive) setAuthLoading(false); });
     const timer = window.setInterval(() => { api.health().then((status) => { if (alive) setHealth(status); }).catch(() => { if (alive) setHealth(null); }); }, 15000);
     return () => { alive = false; window.clearInterval(timer); };
-  }, []);
+  }, [loadWorkspace]);
+
+  useEffect(() => {
+    if (!user || !activeId) return;
+    let alive = true;
+    setDocuments([]);
+    setDocumentChoice("__most_relevant__");
+    Promise.all([api.getConversation(activeId), api.documents(activeId)]).then(([detail, docs]) => {
+      if (!alive) return;
+      setConversations((current) => current.map((item) => item.id === activeId ? detail.conversation : item));
+      setDocuments(docs.documents);
+    }).catch((reason: unknown) => { if (alive) setError(reason instanceof Error ? reason.message : "Could not reopen this conversation."); });
+    return () => { alive = false; };
+  }, [user, activeId]);
+
   useEffect(() => { bottomRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" }); }, [active?.messages.length, busy]);
+
+  const handleAuthSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError("");
+    try {
+      const result = authMode === "register" ? await api.register(email, password) : await api.login(email, password);
+      setUser(result.user);
+      await loadWorkspace();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not authenticate."); }
+  };
+  const handleLogout = async () => {
+    try { await api.logout(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not log out."); return; }
+    workspaceLoadRef.current = null;
+    setUser(null); setConversations([]); setActiveId(""); setDocuments([]); setDraft(""); setPassword(""); setEmail("");
+  };
+
+  const updateConversation = (id: string, updater: (conversation: Conversation) => Conversation) => setConversations((current) => current.map((item) => item.id === id ? updater(item) : item));
+  const newChat = async () => {
+    if (!user) return;
+    try {
+      const next = await api.createConversation();
+      setConversations((current) => [next, ...current]);
+      setActiveId(next.id); setDraft(""); setError(""); setMobileSidebarOpen(false);
+      window.setTimeout(() => textareaRef.current?.focus(), 0);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not create a conversation."); }
+  };
+  const removeConversation = async (id: string) => {
+    try {
+      await api.deleteConversation(id);
+      const remaining = await api.conversations();
+      if (remaining.length === 0) {
+        const next = await api.createConversation();
+        setConversations([next]); setActiveId(next.id);
+      } else {
+        setConversations(remaining);
+        if (id === activeId) setActiveId(remaining[0].id);
+      }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not delete this conversation."); }
+  };
+
   useEffect(() => {
     const onShortcut = (event: globalThis.KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        const next = createConversation();
-        setConversations((current) => [next, ...current]);
-        setActiveId(next.id);
-        setDraft("");
-        setError("");
+        void newChat();
       }
     };
     window.addEventListener("keydown", onShortcut);
     return () => window.removeEventListener("keydown", onShortcut);
-  }, []);
+  });
 
-  const updateConversation = (id: string, updater: (conversation: Conversation) => Conversation) => setConversations((current) => current.map((item) => item.id === id ? updater(item) : item));
-  const newChat = () => {
-    const next = createConversation(); setConversations((current) => [next, ...current]); setActiveId(next.id); setDraft(""); setError(""); setMobileSidebarOpen(false);
-    window.setTimeout(() => textareaRef.current?.focus(), 0);
-  };
-  const removeConversation = (id: string) => {
-    const remaining = conversations.filter((item) => item.id !== id);
-    if (remaining.length === 0) { const next = createConversation(); setConversations([next]); setActiveId(next.id); }
-    else { setConversations(remaining); if (id === activeId) setActiveId(remaining[0].id); }
-  };
   const sendMessage = async (rawText = draft) => {
     const question = rawText.trim();
     if (!question || busy || !active) return;
@@ -89,7 +155,11 @@ export default function App() {
     const userMessage = makeMessage("user", question);
     updateConversation(targetId, (conversation) => ({ ...conversation, title: conversation.messages.length === 0 ? question.slice(0, 42) + (question.length > 42 ? "…" : "") : conversation.title, updatedAt: Date.now(), messages: [...conversation.messages, userMessage] }));
     try {
-      const result = await api.chat({ question, model, document_filename: documentChoice });
+      const result = await api.chat({
+        question, model, document_filename: documentChoice === "__all__" ? "__all__" : "__most_relevant__",
+        conversation_id: targetId,
+        ...(documentChoice !== "__all__" && documentChoice !== "__most_relevant__" ? { document_id: documentChoice } : {}),
+      });
       updateConversation(targetId, (conversation) => ({ ...conversation, updatedAt: Date.now(), messages: [...conversation.messages, makeMessage("assistant", result.answer, { result })] }));
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "Something went wrong. Please try again.";
@@ -104,15 +174,16 @@ export default function App() {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".pdf")) { setError("Please choose a PDF file."); return; }
     if (file.size > 20 * 1024 * 1024) { setError("PDFs must be 20 MB or smaller."); return; }
+    if (!active) { setError("Create or select a conversation before uploading a report."); return; }
     setUploading(true); setError("");
-    try { const response = await api.upload(file); await refreshDocuments(); setDocumentChoice(response.filename); setDocumentsOpen(true); }
+    try { const response = await api.upload(active.id, file); await refreshDocuments(active.id); setDocumentChoice(response.document.id); setDocumentsOpen(true); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "The PDF could not be indexed."); }
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
-  const deleteDocument = async (filename: string) => {
-    if (!window.confirm("Permanently delete " + filename + " from this Mac and rebuild the PDF index?")) return;
-    try { await api.removeDocument(filename); await refreshDocuments(); setDocumentChoice((current) => current === filename ? "__most_relevant__" : current); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not delete that PDF."); }
+  const deleteDocument = async (documentId: string, filename: string) => {
+    if (!active || !window.confirm("Permanently delete " + filename + " from this conversation?")) return;
+    try { await api.removeDocument(active.id, documentId); await refreshDocuments(active.id); setDocumentChoice((current) => current === documentId ? "__most_relevant__" : current); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not delete that report."); }
   };
 
   return <div className={"app-shell " + (sidebarCollapsed ? "sidebar-collapsed" : "")}>
