@@ -7,9 +7,9 @@ import type { ChatMessage, Conversation, HealthStatus, LocalDocument } from "./t
 
 const makeId = () => globalThis.crypto?.randomUUID?.() ?? "chat-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
 const suggestions = [
-  { icon: "✳", title: "Understand a health topic", prompt: "Explain how blood pressure is measured and what the numbers mean." },
-  { icon: "▤", title: "Explore a medical PDF", prompt: "What is the main purpose of the medical document I selected?" },
-  { icon: "⌁", title: "Prepare for an appointment", prompt: "What general questions can I prepare for a routine healthcare appointment?" },
+  { icon: "✳", title: "Understand my symptoms", prompt: "What could be causing my symptoms, and when should I seek medical care?" },
+  { icon: "▤", title: "Understand a health report", prompt: "Can you explain my health report in simple language and identify values outside the reference ranges?" },
+  { icon: "⌁", title: "Understand my test results", prompt: "What do my test results mean, and what questions should I ask my doctor?" },
 ];
 function makeMessage(role: ChatMessage["role"], content: string, extra: Partial<ChatMessage> = {}): ChatMessage {
   return { id: makeId(), role, content, createdAt: Date.now(), ...extra };
