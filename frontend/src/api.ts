@@ -9,7 +9,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     response = await fetch(API_BASE + path, {
       ...init,
       credentials: "include",
-      headers: { ...(init?.headers || {}) },
+      headers: new Headers(init?.headers),
     });
   } catch {
     throw new Error("Cannot reach the local HealthAI API. Start the backend and try again.");
