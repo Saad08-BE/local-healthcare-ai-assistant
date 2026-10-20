@@ -24,6 +24,9 @@ class PrivateConversationDocumentTests(unittest.TestCase):
         csrf = self.client.get("/api/auth/csrf").json()["csrf_token"]
         self.headers = {"X-CSRF-Token": csrf}
         self._register(self.client, "owner@example.com")
+        # Registration refreshes the CSRF cookie; use the matching token for
+        # subsequent state-changing requests in this client.
+        self.headers = {"X-CSRF-Token": self.client.cookies.get("healthai_csrf")}
         created = self.client.post(
             "/api/conversations", json={"title": "Owner conversation"}, headers=self.headers
         )
