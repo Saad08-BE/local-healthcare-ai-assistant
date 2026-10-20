@@ -204,7 +204,9 @@ def chat(
 
     try:
         pipeline = get_pipeline()
-        private_retriever = conversation_document_retriever(user["id"], request.conversation_id)
+        private_retriever = conversation_document_retriever(
+            user["id"], request.conversation_id, pipeline.document_retriever.embedding_model
+        )
         result = pipeline.answer_question(
             question,
             model_override=model,
