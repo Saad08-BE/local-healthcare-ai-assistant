@@ -69,7 +69,7 @@ def get_pipeline() -> HealthcareRAGPipeline:
     if _pipeline is None:
         with _pipeline_lock:
             if _pipeline is None:
-                _pipeline = HealthcareRAGPipeline.initialize(settings)
+                _pipeline = HealthcareRAGPipeline.initialize(settings, load_shared_documents=False)
     return _pipeline
 
 
