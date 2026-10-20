@@ -87,8 +87,6 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_user_updated
     ON conversations(user_id, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_conversations_user_pinned_updated
-    ON conversations(user_id, is_pinned DESC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_created
     ON messages(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_documents_user_conversation
@@ -145,6 +143,10 @@ def initialize_database(path: str | Path | None = None) -> Path:
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(conversations)").fetchall()}
         if "is_pinned" not in columns:
             connection.execute("ALTER TABLE conversations ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_user_pinned_updated "
+            "ON conversations(user_id, is_pinned DESC, updated_at DESC)"
+        )
         connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     # Keep this local database private to the current operating-system user where
