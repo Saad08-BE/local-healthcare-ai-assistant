@@ -14,10 +14,13 @@ from pydantic import BaseModel, Field
 from app.config.settings import AppSettings
 from app.llm.ollama_client import LocalServiceUnavailable, OllamaClient
 from app.llm.rag_pipeline import HealthcareRAGPipeline
-from app.ui.input_controls import delete_saved_pdf, list_saved_pdfs, save_and_index_pdf
 from backend.auth import _current_user, _require_csrf, router as auth_router
 from backend.database import database_connection, initialize_database
 from backend.conversations import router as conversations_router
+from backend.conversation_documents import (
+    conversation_document_retriever,
+    router as conversation_documents_router,
+)
 
 logger = logging.getLogger("healthai.api")
 settings = AppSettings.from_environment()
@@ -34,6 +37,7 @@ _pipeline: HealthcareRAGPipeline | None = None
 _pipeline_lock = threading.Lock()
 app.include_router(auth_router)
 app.include_router(conversations_router)
+app.include_router(conversation_documents_router)
 MAX_PDF_BYTES = 20 * 1024 * 1024
 MAX_QUERY_CHARS = 4000
 
@@ -43,6 +47,7 @@ class ChatRequest(BaseModel):
     model: str | None = Field(default=None, max_length=160)
     document_filename: str | None = Field(default=None, max_length=255)
     conversation_id: str | None = Field(default=None, max_length=80)
+    document_id: str | None = Field(default=None, max_length=80)
 
 
 class ChatResponse(BaseModel):
@@ -95,11 +100,16 @@ def models() -> dict:
 
 @app.get("/api/documents")
 def documents() -> dict:
-    return {"documents": [{"filename": path.name, "size_bytes": path.stat().st_size} for path in list_saved_pdfs(settings) if path.is_file()]}
+    """The old global document library is intentionally unavailable to the React API."""
+    raise HTTPException(
+        status_code=410,
+        detail="Global PDF access is disabled in the authenticated API. Use a conversation's private documents endpoint.",
+    )
 
 
 @app.post("/api/documents", status_code=201)
 def upload_document(file: UploadFile = File(...)) -> dict:
+    """Reject legacy global uploads; Streamlit retains its independent local workflow."""
     filename = Path(file.filename or "").name
     if not filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=415, detail="Only PDF files are supported.")
@@ -109,29 +119,20 @@ def upload_document(file: UploadFile = File(...)) -> dict:
             raise HTTPException(status_code=413, detail="PDF must be 20 MB or smaller.")
         if not contents.startswith(b"%PDF-"):
             raise HTTPException(status_code=400, detail="The selected file does not look like a valid PDF.")
-        saved_path, chunk_count = save_and_index_pdf(filename, contents, settings)
-        return {"filename": saved_path.name, "chunks_indexed": chunk_count, "stored_locally": True}
-    except HTTPException:
-        raise
-    except (OSError, ValueError, RuntimeError) as exc:
-        logger.warning("Local PDF ingestion failed (%s).", type(exc).__name__)
-        raise HTTPException(status_code=400, detail="The PDF could not be processed. Check that it is readable and try again.") from exc
+        raise HTTPException(
+            status_code=410,
+            detail="Global PDF uploads are disabled. Upload the report inside a specific conversation.",
+        )
     finally:
         file.file.close()
 
 
 @app.delete("/api/documents/{filename}")
 def remove_document(filename: str) -> dict:
-    if Path(filename).name != filename or not filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Invalid PDF filename.")
-    if not any(path.name == filename for path in list_saved_pdfs(settings)):
-        raise HTTPException(status_code=404, detail="That PDF is not in the local document library.")
-    try:
-        delete_saved_pdf(filename, settings)
-        return {"deleted": True, "filename": filename}
-    except (OSError, ValueError, RuntimeError) as exc:
-        logger.warning("Local PDF deletion failed (%s).", type(exc).__name__)
-        raise HTTPException(status_code=500, detail="The PDF could not be deleted or re-indexed.") from exc
+    raise HTTPException(
+        status_code=410,
+        detail="Global PDF deletion is disabled in the authenticated API. Delete the report from its conversation.",
+    )
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -141,37 +142,70 @@ def chat(
     csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
 ) -> ChatResponse:
     question = request.question.strip()
-    user = None
-    if request.conversation_id:
-        _require_csrf(http_request, csrf_token)
-        user = _current_user(http_request)
-        initialize_database()
-        with database_connection() as connection:
-            owned = connection.execute(
-                "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
-                (request.conversation_id, user["id"]),
-            ).fetchone()
-        if owned is None:
-            raise HTTPException(status_code=404, detail="Conversation not found.")
     if not question:
         raise HTTPException(status_code=422, detail="Enter a question before sending.")
+    if not request.conversation_id:
+        raise HTTPException(status_code=400, detail="Create or select a conversation before sending a message.")
+    _require_csrf(http_request, csrf_token)
+    user = _current_user(http_request)
+    initialize_database()
+    with database_connection() as connection:
+        owned = connection.execute(
+            "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
+            (request.conversation_id, user["id"]),
+        ).fetchone()
+    if owned is None:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+
     model = (request.model or settings.llm_model).strip()
     if not model or len(model) > 160:
         raise HTTPException(status_code=422, detail="Choose a valid local model.")
     installed = _installed_models()
     if installed and not any(name == model or name.startswith(model + "-") for name in installed):
         raise HTTPException(status_code=400, detail="Choose a model installed in local Ollama.")
-    document_filename = request.document_filename
-    if document_filename and document_filename not in {"__all__", "__most_relevant__"}:
+
+    document_filename = request.document_filename or "__most_relevant__"
+    document_id = request.document_id
+    if document_id:
+        with database_connection() as connection:
+            selected = connection.execute(
+                """SELECT id, original_filename FROM documents
+                   WHERE id = ? AND user_id = ? AND conversation_id = ?""",
+                (document_id, user["id"], request.conversation_id),
+            ).fetchone()
+        if selected is None:
+            raise HTTPException(status_code=404, detail="The selected report is not in this conversation.")
+        document_filename = selected["original_filename"]
+    elif document_filename not in {"__all__", "__most_relevant__"}:
         if Path(document_filename).name != document_filename or not document_filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="Invalid PDF selection.")
-        if not any(path.name == document_filename for path in list_saved_pdfs(settings)):
-            raise HTTPException(status_code=404, detail="The selected PDF is not saved locally.")
+        with database_connection() as connection:
+            selected = connection.execute(
+                """SELECT id FROM documents
+                   WHERE user_id = ? AND conversation_id = ? AND original_filename = ?
+                   ORDER BY created_at DESC LIMIT 1""",
+                (user["id"], request.conversation_id, document_filename),
+            ).fetchone()
+        if selected is None:
+            raise HTTPException(status_code=404, detail="The selected report is not in this conversation.")
+        document_id = selected["id"]
+
     try:
-        result = get_pipeline().answer_question(question, model_override=model, document_filename=document_filename or "__most_relevant__")
+        pipeline = get_pipeline()
+        private_retriever = conversation_document_retriever(user["id"], request.conversation_id)
+        result = pipeline.answer_question(
+            question,
+            model_override=model,
+            document_filename=document_filename,
+            document_retriever_override=private_retriever,
+            document_id=document_id,
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("Local RAG request failed (%s).", type(exc).__name__)
         raise HTTPException(status_code=500, detail="HealthAI could not complete this request. Check local services and application logs.") from exc
+
     response = ChatResponse(
         question=result.question, answer=result.answer, model=result.llm_model,
         offline_fallback=result.is_offline_fallback, urgent_warning=result.urgent_warning,
@@ -180,25 +214,29 @@ def chat(
         retrieved_cases=[{"score": item.score, "text": item.text} for item in result.retrieved_cases],
         cohort_statistics=result.cohort_statistics,
     )
-    if user is not None and request.conversation_id:
-        metadata = json.dumps({
-            "model": result.llm_model,
-            "document_sources": [{"citation": item.citation, "score": item.score, "text": item.text} for item in result.document_sources],
-            "urgent_warning": result.urgent_warning,
-        })
-        with database_connection() as connection:
-            connection.execute(
-                "INSERT INTO messages(conversation_id, role, content) VALUES (?, ?, ?)",
-                (request.conversation_id, "user", question),
-            )
-            connection.execute(
-                "INSERT INTO messages(conversation_id, role, content, metadata_json) VALUES (?, ?, ?, ?)",
-                (request.conversation_id, "assistant", result.answer, metadata),
-            )
-            connection.execute(
-                """UPDATE conversations SET updated_at = CURRENT_TIMESTAMP,
-                   title = CASE WHEN title = 'New chat' THEN ? ELSE title END
-                   WHERE id = ? AND user_id = ?""",
-                (question[:80] or "New chat", request.conversation_id, user["id"]),
-            )
+    metadata = json.dumps({
+        "model": result.llm_model,
+        "latency_seconds": result.total_latency_seconds,
+        "offline_fallback": result.is_offline_fallback,
+        "document_sources": [{"citation": item.citation, "score": item.score, "text": item.text} for item in result.document_sources],
+        "retrieved_cases": [{"score": item.score, "text": item.text} for item in result.retrieved_cases],
+        "cohort_statistics": result.cohort_statistics,
+        "urgent_warning": result.urgent_warning,
+        "disclaimer": result.disclaimer,
+    })
+    with database_connection() as connection:
+        connection.execute(
+            "INSERT INTO messages(conversation_id, role, content) VALUES (?, 'user', ?)",
+            (request.conversation_id, question),
+        )
+        connection.execute(
+            "INSERT INTO messages(conversation_id, role, content, metadata_json) VALUES (?, 'assistant', ?, ?)",
+            (request.conversation_id, result.answer, metadata),
+        )
+        connection.execute(
+            """UPDATE conversations SET updated_at = CURRENT_TIMESTAMP,
+               title = CASE WHEN title = 'New chat' THEN ? ELSE title END
+               WHERE id = ? AND user_id = ?""",
+            (question[:80] or "New chat", request.conversation_id, user["id"]),
+        )
     return response
