@@ -49,7 +49,8 @@ afterEach(() => cleanup());
 
 test("renders the HealthAI workspace and privacy indicator", async () => {
   render(<App />);
-  expect(await screen.findByText("HealthAI")).toBeInTheDocument();
-  expect(screen.getByText(/private by design/i)).toBeInTheDocument();
+  // Wait for the authenticated workspace rather than matching the transient loading screen.
   expect(await screen.findByPlaceholderText(/ask healthai/i)).toBeInTheDocument();
+  expect(screen.getByText("HealthAI")).toBeInTheDocument();
+  expect(screen.getByText(/private by design/i)).toBeInTheDocument();
 });
