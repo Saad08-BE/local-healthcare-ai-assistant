@@ -49,6 +49,12 @@ def _conversation_index_dir(user_id: int, conversation_id: str) -> Path:
     return _storage_root() / str(user_id) / conversation_id / "index"
 
 
+def delete_conversation_storage(user_id: int, conversation_id: str) -> None:
+    """Remove the report files and vector index when their conversation is deleted."""
+    conversation_dir = _storage_root() / str(user_id) / conversation_id
+    shutil.rmtree(conversation_dir, ignore_errors=True)
+
+
 def _rebuild_index(
     user_id: int,
     conversation_id: str,
@@ -116,15 +122,6 @@ def conversation_document_retriever(user_id: int, conversation_id: str) -> Docum
             embedding_model=get_embedding_model(),
         )
     return DocumentRetriever.from_local_files(index_dir)
-
-
-def empty_document_retriever(pipeline: object) -> DocumentRetriever:
-    """Return a retriever that cannot search the legacy shared PDF index."""
-    current = getattr(pipeline, "document_retriever")
-    return DocumentRetriever(
-        vector_store=LocalVectorStore(),
-        embedding_model=current.embedding_model,
-    )
 
 
 @router.get("/{conversation_id}/documents")
