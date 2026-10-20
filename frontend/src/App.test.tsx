@@ -1,13 +1,14 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import App from "./App";
 
-const mockConversation = {
-  id: "conversation-1",
-  title: "New chat",
-  updatedAt: Date.now(),
-  messages: [],
-};
+const { mockConversation } = vi.hoisted(() => ({
+  mockConversation: {
+    id: "conversation-1",
+    title: "New chat",
+    updatedAt: 1,
+    messages: [],
+  },
+}));
 
 vi.mock("./api", () => ({
   api: {
@@ -41,6 +42,8 @@ vi.mock("./api", () => ({
     logout: vi.fn(),
   },
 }));
+
+import App from "./App";
 
 afterEach(() => cleanup());
 
