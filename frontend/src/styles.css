@@ -12,3 +12,17 @@
 @media(max-width:760px){.sidebar{width:min(290px,86vw);transform:translateX(-100%);box-shadow:20px 0 60px #0006}.sidebar-mobile-open{transform:translateX(0)}.sidebar-collapse{display:none}.mobile-close,.mobile-menu{display:inline-grid}.main-panel,.sidebar-collapsed .main-panel{width:100%;margin-left:0}.sidebar-collapsed .sidebar{transform:translateX(-100%)}.mobile-scrim{position:fixed;z-index:25;inset:0;display:block;border:0;background:#0009}.topbar{min-height:58px;padding:0 13px}.topbar-left,.topbar-right{gap:8px}.breadcrumb{gap:6px;font-size:10px}.breadcrumb strong{max-width:125px}.connection-chip{padding:6px 8px;font-size:9px}.topbar-settings{width:31px;height:31px;justify-content:center;padding:0}.topbar-settings span{display:none}.chat-stage{min-height:calc(100dvh - 58px);padding:0 14px}.welcome-panel{padding:42px 0 27px}.welcome-orb{width:62px;height:62px;border-radius:20px;margin-bottom:22px}.welcome-panel h1{font-size:clamp(32px,8vw,43px);letter-spacing:-1.6px}.welcome-description{font-size:12px;margin:15px auto 22px}.suggestion-grid{grid-template-columns:1fr;margin-top:22px}.suggestion-card{min-height:auto;display:grid;grid-template-columns:31px 1fr 16px;column-gap:10px;align-items:center;padding:12px}.suggestion-icon{grid-row:span 2;margin:0}.suggestion-title{margin:0}.suggestion-prompt{grid-column:2}.suggestion-arrow{position:static;grid-column:3;grid-row:1/span 2}.welcome-note{font-size:9px;line-height:1.6}.composer-dock{padding:12px 0 9px}.composer{border-radius:15px;padding:10px}.composer textarea{font-size:13px}.composer-tools{gap:7px}.model-picker select{max-width:91px}.document-picker select{max-width:87px}.composer-disclaimer{font-size:8px}.message{grid-template-columns:29px minmax(0,1fr);gap:9px}.message-avatar{width:28px;height:28px;border-radius:9px}.markdown-body{font-size:12px}}
 @media(max-width:400px){.connection-chip{max-width:95px;overflow:hidden;white-space:nowrap}.breadcrumb>span:first-child,.breadcrumb-slash{display:none}.document-picker{display:none}.composer-disclaimer{align-items:flex-start}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
+
+/* Account gate for the authenticated React/FastAPI workspace. */
+.auth-screen{min-height:100dvh;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at top,#18243b 0%,#0c111b 58%)}
+.auth-card{width:min(100%,420px);display:flex;flex-direction:column;gap:15px;padding:34px;border:1px solid #293449;border-radius:22px;background:#111925;box-shadow:0 25px 90px #0005;color:#e8edf6}
+.auth-card .brand-mark{width:48px;height:48px;display:grid;place-items:center;border-radius:15px;background:#273a5a;color:#a9c3ff}
+.auth-card h1{margin:2px 0 0;font-size:27px;letter-spacing:-.7px}
+.auth-card>p{margin:0;color:#9aa9bf;font-size:13px;line-height:1.65}
+.auth-card label{display:flex;flex-direction:column;gap:7px;color:#cbd5e4;font-size:12px;font-weight:600}
+.auth-card input{width:100%;padding:12px 13px;border:1px solid #303d51;border-radius:10px;background:#0b121d;color:#edf3ff;font:inherit;font-weight:400;outline:none}
+.auth-card input:focus{border-color:#769be7;box-shadow:0 0 0 3px #769be722}
+.auth-card .modal-done{width:100%;margin-top:4px}
+.auth-switch{border:0;background:transparent;color:#a9c3ff;padding:8px;cursor:pointer;font:inherit;font-size:12px}
+.auth-card .auth-footnote{padding-top:10px;border-top:1px solid #273244;font-size:11px}
