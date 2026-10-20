@@ -123,15 +123,20 @@ def _rebuild_index(
             (temp_dir / name).replace(index_dir / name)
 
 
-def conversation_document_retriever(user_id: int, conversation_id: str) -> DocumentRetriever:
+def conversation_document_retriever(
+    user_id: int,
+    conversation_id: str,
+    embedding_model=None,
+) -> DocumentRetriever:
     """Load only the private vector index for the requested owned conversation."""
     index_dir = _conversation_index_dir(user_id, conversation_id)
+    model = embedding_model or get_embedding_model()
     if not (index_dir / "document_index_vectors.json").is_file():
         return DocumentRetriever(
             vector_store=LocalVectorStore(),
-            embedding_model=get_embedding_model(),
+            embedding_model=model,
         )
-    return DocumentRetriever.from_local_files(index_dir)
+    return DocumentRetriever.from_local_files(index_dir, embedding_model=model)
 
 
 @router.get("/{conversation_id}/documents")
