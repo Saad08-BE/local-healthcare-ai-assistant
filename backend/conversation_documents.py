@@ -33,6 +33,16 @@ def _storage_root() -> Path:
     return resolve_database_path().parent / "conversation_documents"
 
 
+def _ensure_private_dir(path: Path) -> None:
+    """Create a local storage directory and restrict it to the current OS user."""
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        path.chmod(0o700)
+    except OSError:
+        # Keep the app usable on filesystems without POSIX permissions.
+        pass
+
+
 def _conversation_row(conversation_id: str, user_id: int) -> dict:
     initialize_database()
     with database_connection() as connection:
@@ -99,7 +109,7 @@ def _rebuild_index(
             )
 
     index_dir = _conversation_index_dir(user_id, conversation_id)
-    index_dir.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _ensure_private_dir(index_dir.parent)
     if not chunks:
         shutil.rmtree(index_dir, ignore_errors=True)
         return
@@ -108,7 +118,7 @@ def _rebuild_index(
         temp_dir = Path(temp_name)
         retriever = DocumentRetriever(embedding_model=None)
         retriever.index_chunks(chunks, temp_dir)
-        index_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        _ensure_private_dir(index_dir)
         for name in ("document_index_vectors.json", "document_index_metadata.jsonl"):
             (temp_dir / name).replace(index_dir / name)
 
@@ -173,7 +183,7 @@ def upload_conversation_document(
 
     document_id = str(uuid.uuid4())
     destination_dir = _storage_root() / str(user["id"]) / conversation_id / document_id
-    destination_dir.mkdir(parents=True, exist_ok=False, mode=0o700)
+    _ensure_private_dir(destination_dir)
     destination = destination_dir / filename
     try:
         destination.write_bytes(contents)
