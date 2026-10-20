@@ -93,6 +93,8 @@ class HealthcareRAGPipeline:
         question: str,
         model_override: str | None = None,
         document_filename: str | None = None,
+        document_retriever_override: DocumentRetriever | None = None,
+        document_id: str | None = None,
     ) -> RAGResponse:
         """Run full unified RAG pipeline for a user question.
 
@@ -140,19 +142,24 @@ class HealthcareRAGPipeline:
         # when a broad question such as "What is this document about?" has a low
         # cosine score. The selected filename already scopes the search to that PDF.
         selected_specific_pdf = bool(
-            document_filename
-            and document_filename not in {"__all__", "__most_relevant__"}
+            document_id
+            or (
+                document_filename
+                and document_filename not in {"__all__", "__most_relevant__"}
+            )
         )
         document_threshold = (
             -1.0
             if selected_specific_pdf
             else min(self.settings.similarity_threshold, 0.20)
         )
-        doc_results: list[DocumentSearchResult] = self.document_retriever.search(
+        active_document_retriever = document_retriever_override or self.document_retriever
+        doc_results: list[DocumentSearchResult] = active_document_retriever.search(
             query=question,
             top_k=4,
             min_similarity=document_threshold,
             filename=document_filename,
+            document_id=document_id,
         )
         document_context_block = _build_document_context_block(doc_results)
 
