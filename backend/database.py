@@ -17,7 +17,7 @@ from typing import Iterator
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DATABASE_PATH = PROJECT_ROOT / "data" / "react_api" / "healthai.sqlite3"
 DATABASE_PATH_ENV = "HEALTHAI_DATABASE_PATH"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 SCHEMA = """
@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL,
     title TEXT NOT NULL DEFAULT 'New chat',
+    is_pinned INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (id, user_id),
@@ -86,6 +87,8 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_user_updated
     ON conversations(user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conversations_user_pinned_updated
+    ON conversations(user_id, is_pinned DESC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_created
     ON messages(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_documents_user_conversation
@@ -139,6 +142,9 @@ def initialize_database(path: str | Path | None = None) -> Path:
     db_path = resolve_database_path(path)
     with database_connection(db_path) as connection:
         connection.executescript(SCHEMA)
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(conversations)").fetchall()}
+        if "is_pinned" not in columns:
+            connection.execute("ALTER TABLE conversations ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0")
         connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     # Keep this local database private to the current operating-system user where
