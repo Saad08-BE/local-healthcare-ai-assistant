@@ -34,10 +34,16 @@ def _storage_root() -> Path:
 
 
 def _ensure_private_dir(path: Path) -> None:
-    """Create a local storage directory and restrict it to the current OS user."""
+    """Create a local storage directory and restrict its private tree to this OS user."""
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    root = _storage_root().resolve()
+    current = path.resolve()
     try:
-        path.chmod(0o700)
+        while current == root or root in current.parents:
+            current.chmod(0o700)
+            if current == root:
+                break
+            current = current.parent
     except OSError:
         # Keep the app usable on filesystems without POSIX permissions.
         pass
