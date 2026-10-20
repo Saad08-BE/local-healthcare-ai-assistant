@@ -32,7 +32,7 @@
 .conversation-more-button{display:grid;place-items:center;flex:0 0 auto;width:28px;height:28px;margin-right:4px;border:0;border-radius:7px;color:#9297a5;background:transparent}
 .conversation-more-button:hover,.conversation-more-button[aria-expanded="true"]{color:#f3f4f8;background:#30323c}
 .conversation-pin-indicator{flex:0 0 auto;color:#b8c7ff}
-.conversation-menu{position:absolute;z-index:60;top:calc(100% + 3px);right:4px;width:190px;padding:5px;border:1px solid #ffffff18;border-radius:11px;background:#202127;box-shadow:0 12px 35px #0009}
+.conversation-menu{position:fixed;z-index:100;top:8px;left:8px;right:auto;width:190px;padding:5px;border:1px solid #ffffff18;border-radius:11px;background:#202127;box-shadow:0 12px 35px #0009}
 .conversation-menu button{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;border:0;border-radius:7px;color:#d9dce6;background:transparent;text-align:left;font-size:11px}
 .conversation-menu button:hover{background:#30323c;color:#fff}
 .conversation-menu button svg{flex:0 0 auto;color:#aeb7d7}
@@ -40,4 +40,4 @@
 .conversation-menu .conversation-menu-delete{color:#ffaaaa}
 .conversation-menu .conversation-menu-delete svg{color:#ffaaaa}
 .conversation-menu .conversation-menu-delete:hover{background:#39272d;color:#ffc6c6}
-@media (max-width:640px){.conversation-menu{right:2px;width:184px}}
+@media (max-width:640px){.conversation-menu{width:184px}}
