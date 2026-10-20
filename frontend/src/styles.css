@@ -41,3 +41,15 @@
 .conversation-menu .conversation-menu-delete svg{color:#ffaaaa}
 .conversation-menu .conversation-menu-delete:hover{background:#39272d;color:#ffc6c6}
 @media (max-width:640px){.conversation-menu{width:184px}}
+
+
+/* Signed-in account widget at the bottom of the navigation sidebar */
+.account-widget{display:flex;align-items:center;gap:10px;min-width:0;padding:11px 10px;margin-top:8px;border-top:1px solid #ffffff12;border-radius:10px}
+.account-avatar{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:50%;background:linear-gradient(145deg,#7d8ff4,#8a6bd1);color:#fff;font-size:14px;font-weight:700;text-transform:uppercase}
+.account-identity{display:flex;flex:1;flex-direction:column;gap:3px;min-width:0}
+.account-identity strong{overflow:hidden;color:#eceef6;font-size:12px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+.account-identity span{overflow:hidden;color:#9297a5;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.account-settings-button{display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;border:0;border-radius:8px;background:transparent;color:#a8adbb;cursor:pointer}
+.account-settings-button:hover{background:#30323c;color:#fff}
+.sidebar-collapsed .account-widget{justify-content:center;padding:10px 0}
+.sidebar-collapsed .account-identity,.sidebar-collapsed .account-settings-button{display:none}
