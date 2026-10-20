@@ -36,6 +36,7 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
@@ -278,10 +279,15 @@ export default function App() {
       <div className="sidebar-bottom">
         <button className={"sidebar-action " + (documentsOpen ? "sidebar-action-active" : "")} onClick={() => setDocumentsOpen((open) => !open)}><FileText size={17} /><span>Conversation reports</span><span className="count-pill">{documents.length}</span></button>
         {documentsOpen && <div className="document-library"><div className="document-library-heading">Reports in this conversation</div>{documents.length === 0 ? <p className="document-empty">No PDFs yet. Add one to ask questions about its contents.</p> : documents.map((document) => <div className="document-row" key={document.filename}><FileText size={15} /><button className="document-name" title={document.filename} onClick={() => setDocumentChoice(document.id)}>{document.filename}</button><button className="icon-button document-delete" aria-label={"Delete " + document.filename} onClick={() => void deleteDocument(document.id, document.filename)}><Trash2 size={13} /></button></div>)}<button className="upload-library-button" onClick={() => fileRef.current?.click()}><Upload size={14} /> Add a PDF</button></div>}
-        <div className="account-widget">
-          <div className="account-avatar" aria-hidden="true">{(user?.email || "U").trim().charAt(0).toUpperCase()}</div>
-          <div className="account-identity"><strong>{user?.email?.split("@")[0] || "User"}</strong><span>{user?.email || "Signed-in account"}</span></div>
-          <button type="button" className="account-settings-button" aria-label="Account settings" title="Account settings" onClick={() => setSettingsOpen(true)}><Settings2 size={18} /></button>
+        <div className="account-widget-wrap">
+          {accountMenuOpen && <div className="account-dropdown">
+            <div className="account-dropdown-identity"><strong>{user?.email?.split("@")[0] || "User"}</strong><span>{user?.email || ""}</span></div>
+            <button type="button" className="account-logout-button" onClick={() => { setAccountMenuOpen(false); void handleLogout(); }}><X size={15} /><span>Log out</span></button>
+          </div>}
+          <button type="button" className="account-widget" aria-expanded={accountMenuOpen} aria-haspopup="menu" onClick={() => setAccountMenuOpen((open) => !open)}>
+            <span className="account-identity"><strong>{user?.email?.split("@")[0] || "User"}</strong></span>
+            <ChevronDown size={16} className={"account-chevron " + (accountMenuOpen ? "account-chevron-open" : "")} />
+          </button>
         </div>
       </div>
     </aside>
