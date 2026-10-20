@@ -9,7 +9,8 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from backend import main as api_module
-from backend.database import initialize_database
+from backend.database import database_connection, initialize_database
+from app.ingestion.pdf_ingestor import DocumentChunk
 
 
 class PrivateConversationDocumentTests(unittest.TestCase):
@@ -81,6 +82,59 @@ class PrivateConversationDocumentTests(unittest.TestCase):
             files={"file": ("notes.pdf", b"%PDF-1.4 sample", "application/pdf")},
         )
         self.assertEqual(response.status_code, 410)
+
+    def test_uploaded_report_is_stored_under_its_conversation(self):
+        chunk = DocumentChunk(
+            chunk_id="temporary-chunk", doc_id="temporary-doc", filename="report.pdf",
+            page_number=1, chunk_index=1, text="Sample report text.", char_count=18,
+        )
+
+        def fake_index(chunks, directory, batch_size=128):
+            directory = Path(directory)
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / "document_index_vectors.json").write_text('{"dimension": 384, "count": 1, "vectors": [[1.0]]}')
+            (directory / "document_index_metadata.jsonl").write_text('{"record_id":"sample","text":"Sample report text.","metadata":{"doc_id":"sample"}}\\n')
+            return {}
+
+        with patch("backend.conversation_documents.PDFIngestor.process_file", return_value=[chunk]), patch(
+            "backend.conversation_documents.DocumentRetriever"
+        ) as retriever_class:
+            retriever_class.return_value.index_chunks.side_effect = fake_index
+            response = self.client.post(
+                f"/api/conversations/{self.conversation_id}/documents",
+                headers=self.headers,
+                files={"file": ("report.pdf", b"%PDF-1.4 fake but mocked", "application/pdf")},
+            )
+
+        self.assertEqual(response.status_code, 201, response.text)
+        document_id = response.json()["document"]["id"]
+        with database_connection() as connection:
+            row = connection.execute(
+                "SELECT storage_path FROM documents WHERE id = ? AND conversation_id = ?",
+                (document_id, self.conversation_id),
+            ).fetchone()
+        self.assertIsNotNone(row)
+        stored_path = Path(row["storage_path"])
+        self.assertTrue(stored_path.is_file())
+        self.assertIn("conversation_documents", stored_path.parts)
+        self.assertNotIn("data/documents", str(stored_path))
+
+        other = TestClient(api_module.app)
+        try:
+            self._register(other, "another-owner@example.com")
+            self.assertEqual(
+                other.get(f"/api/conversations/{self.conversation_id}/documents").status_code,
+                404,
+            )
+        finally:
+            other.close()
+
+        deleted = self.client.delete(
+            f"/api/conversations/{self.conversation_id}/documents/{document_id}",
+            headers=self.headers,
+        )
+        self.assertEqual(deleted.status_code, 200, deleted.text)
+        self.assertFalse(stored_path.exists())
 
     def test_private_document_upload_rejects_non_pdf_before_storage(self):
         response = self.client.post(
