@@ -197,7 +197,7 @@ def chat(
                ORDER BY id DESC LIMIT 8""",
             (request.conversation_id,),
         ).fetchall()
-    conversation_context = "\\n".join(
+    conversation_context = "\n".join(
         f"{row['role']}: {row['content'][:800]}"
         for row in reversed(history_rows)
     )[-4000:]
