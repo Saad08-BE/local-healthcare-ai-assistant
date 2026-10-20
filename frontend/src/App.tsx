@@ -285,6 +285,7 @@ export default function App() {
             <button type="button" className="account-logout-button" onClick={() => { setAccountMenuOpen(false); void handleLogout(); }}><X size={15} /><span>Log out</span></button>
           </div>}
           <button type="button" className="account-widget" aria-expanded={accountMenuOpen} aria-haspopup="menu" onClick={() => setAccountMenuOpen((open) => !open)}>
+            <span className="account-avatar" aria-hidden="true">{(user?.email || "U").trim().charAt(0).toUpperCase()}</span>
             <span className="account-identity"><strong>{user?.email?.split("@")[0] || "User"}</strong></span>
             <ChevronDown size={16} className={"account-chevron " + (accountMenuOpen ? "account-chevron-open" : "")} />
           </button>
