@@ -131,7 +131,7 @@ class HealthcareRAGPipeline:
         # recent conversation context to resolve follow-up references during retrieval.
         retrieval_query = question
         if conversation_context:
-            retrieval_query = f"{question}\\nRecent conversation context: {conversation_context}"
+            retrieval_query = f"{question}\nRecent conversation context: {conversation_context}"
 
         # --- 2. Dataset Hybrid Retrieval ---
         context: RetrievalContext = self.retriever.retrieve_context(
@@ -174,9 +174,9 @@ class HealthcareRAGPipeline:
         evidence_context_block = context.formatted_context_block
         if conversation_context:
             evidence_context_block += (
-                "\\n\\n--- RECENT CONVERSATION CONTEXT (for resolving follow-ups; not verified evidence) ---\\n"
+                "\n\n--- RECENT CONVERSATION CONTEXT (for resolving follow-ups; not verified evidence) ---\n"
                 + conversation_context
-                + "\\n--- END CONVERSATION CONTEXT ---"
+                + "\n--- END CONVERSATION CONTEXT ---"
             )
         grounded_prompt = build_grounded_prompt(
             question=question,
