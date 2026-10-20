@@ -145,11 +145,14 @@ export default function App() {
   };
   const shareConversation = async (conversation: Conversation) => {
     setOpenMenuId("");
-    const transcript = conversation.messages.map((message) => (message.role === "user" ? "You" : "HealthAI") + ":\\n" + message.content).join("\\n\\n");
-    const shareText = "HealthAI conversation: " + conversation.title + "\\n\\n" + (transcript || "This conversation has no messages yet.");
     try {
+      // Load the selected conversation's saved messages so sharing works for chats
+      // that are not currently open, without exposing any other conversation's reports.
+      const detail = await api.getConversation(conversation.id);
+      const transcript = detail.conversation.messages.map((message) => (message.role === "user" ? "You" : "HealthAI") + ":\\n" + message.content).join("\\n\\n");
+      const shareText = "HealthAI conversation: " + detail.conversation.title + "\\n\\n" + (transcript || "This conversation has no messages yet.");
       if (typeof navigator.share === "function") {
-        await navigator.share({ title: conversation.title, text: shareText });
+        await navigator.share({ title: detail.conversation.title, text: shareText });
       } else if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(shareText);
         window.alert("Conversation copied to your clipboard. You can now paste it into a message.");
@@ -159,8 +162,15 @@ export default function App() {
     } catch (reason) {
       if (reason instanceof Error && reason.name === "AbortError") return;
       try {
-        await navigator.clipboard.writeText(shareText);
-        window.alert("Conversation copied to your clipboard. You can now paste it into a message.");
+        const detail = await api.getConversation(conversation.id);
+        const transcript = detail.conversation.messages.map((message) => (message.role === "user" ? "You" : "HealthAI") + ":\\n" + message.content).join("\\n\\n");
+        const shareText = "HealthAI conversation: " + detail.conversation.title + "\\n\\n" + (transcript || "This conversation has no messages yet.");
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(shareText);
+          window.alert("Conversation copied to your clipboard. You can now paste it into a message.");
+        } else {
+          window.prompt("Copy this conversation text to share it:", shareText);
+        }
       } catch {
         setError("Could not share this conversation from this browser.");
       }
