@@ -12,6 +12,8 @@ from app.llm.ollama_client import LLMGenerationResult, LocalServiceUnavailable, 
 from app.llm.prompts import HEALTHCARE_SYSTEM_PROMPT, build_grounded_prompt
 from app.retrieval.dataset_retriever import DatasetRetriever, RetrievalContext
 from app.retrieval.document_retriever import DocumentRetriever, DocumentSearchResult
+from app.retrieval.vector_store import LocalVectorStore
+from app.embeddings.local_embedding import get_embedding_model
 from app.retrieval.vector_store import VectorSearchResult
 from app.safety import SafetyDecision, healthcare_disclaimer, validate_question
 from app.utils.logging import configure_logging, log_rag_query, log_security_event
@@ -65,8 +67,14 @@ class HealthcareRAGPipeline:
         self.logger = configure_logging(settings.paths.logs_dir, debug=settings.debug)
 
     @classmethod
-    def initialize(cls, settings: AppSettings | None = None) -> "HealthcareRAGPipeline":
-        """Factory initializing pipeline components from project settings and local disk."""
+    def initialize(
+        cls,
+        settings: AppSettings | None = None,
+        *,
+        load_shared_documents: bool = True,
+    ) -> "HealthcareRAGPipeline":
+        """Initialize local RAG components; API callers can omit the shared PDF index."""
+
         app_settings = settings or AppSettings.from_environment()
         app_settings.paths.create_runtime_directories()
 
@@ -74,9 +82,15 @@ class HealthcareRAGPipeline:
             vector_store_dir=app_settings.paths.vector_store_dir,
             processed_data_dir=app_settings.paths.processed_data_dir,
         )
-        document_retriever = DocumentRetriever.from_local_files(
-            vector_store_dir=app_settings.paths.vector_store_dir,
-        )
+        if load_shared_documents:
+            document_retriever = DocumentRetriever.from_local_files(
+                vector_store_dir=app_settings.paths.vector_store_dir,
+            )
+        else:
+            document_retriever = DocumentRetriever(
+                vector_store=LocalVectorStore(),
+                embedding_model=get_embedding_model(),
+            )
         ollama = OllamaClient(
             base_url=app_settings.ollama_base_url,
             timeout_seconds=60.0,
