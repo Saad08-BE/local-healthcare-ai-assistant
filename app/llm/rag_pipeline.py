@@ -12,6 +12,8 @@ from app.llm.ollama_client import LLMGenerationResult, LocalServiceUnavailable, 
 from app.llm.prompts import HEALTHCARE_SYSTEM_PROMPT, build_grounded_prompt
 from app.retrieval.dataset_retriever import DatasetRetriever, RetrievalContext
 from app.retrieval.document_retriever import DocumentRetriever, DocumentSearchResult
+from app.retrieval.vector_store import LocalVectorStore
+from app.embeddings.local_embedding import get_embedding_model
 from app.retrieval.vector_store import VectorSearchResult
 from app.safety import SafetyDecision, healthcare_disclaimer, validate_question
 from app.utils.logging import configure_logging, log_rag_query, log_security_event
@@ -65,8 +67,14 @@ class HealthcareRAGPipeline:
         self.logger = configure_logging(settings.paths.logs_dir, debug=settings.debug)
 
     @classmethod
-    def initialize(cls, settings: AppSettings | None = None) -> "HealthcareRAGPipeline":
-        """Factory initializing pipeline components from project settings and local disk."""
+    def initialize(
+        cls,
+        settings: AppSettings | None = None,
+        *,
+        load_shared_documents: bool = True,
+    ) -> "HealthcareRAGPipeline":
+        """Initialize local RAG components; API callers can omit the shared PDF index."""
+
         app_settings = settings or AppSettings.from_environment()
         app_settings.paths.create_runtime_directories()
 
@@ -74,9 +82,15 @@ class HealthcareRAGPipeline:
             vector_store_dir=app_settings.paths.vector_store_dir,
             processed_data_dir=app_settings.paths.processed_data_dir,
         )
-        document_retriever = DocumentRetriever.from_local_files(
-            vector_store_dir=app_settings.paths.vector_store_dir,
-        )
+        if load_shared_documents:
+            document_retriever = DocumentRetriever.from_local_files(
+                vector_store_dir=app_settings.paths.vector_store_dir,
+            )
+        else:
+            document_retriever = DocumentRetriever(
+                vector_store=LocalVectorStore(),
+                embedding_model=get_embedding_model(),
+            )
         ollama = OllamaClient(
             base_url=app_settings.ollama_base_url,
             timeout_seconds=60.0,
@@ -93,6 +107,9 @@ class HealthcareRAGPipeline:
         question: str,
         model_override: str | None = None,
         document_filename: str | None = None,
+        document_retriever_override: DocumentRetriever | None = None,
+        document_id: str | None = None,
+        conversation_context: str | None = None,
     ) -> RAGResponse:
         """Run full unified RAG pipeline for a user question.
 
@@ -124,9 +141,15 @@ class HealthcareRAGPipeline:
                 safety_decision=safety,
             )
 
+        # Keep the current question as the safety-checked user input, while using
+        # recent conversation context to resolve follow-up references during retrieval.
+        retrieval_query = question
+        if conversation_context:
+            retrieval_query = f"{question}\nRecent conversation context: {conversation_context}"
+
         # --- 2. Dataset Hybrid Retrieval ---
         context: RetrievalContext = self.retriever.retrieve_context(
-            query=question,
+            query=retrieval_query,
             top_k=self.settings.top_k,
             min_similarity=self.settings.similarity_threshold,
         )
@@ -140,26 +163,38 @@ class HealthcareRAGPipeline:
         # when a broad question such as "What is this document about?" has a low
         # cosine score. The selected filename already scopes the search to that PDF.
         selected_specific_pdf = bool(
-            document_filename
-            and document_filename not in {"__all__", "__most_relevant__"}
+            document_id
+            or (
+                document_filename
+                and document_filename not in {"__all__", "__most_relevant__"}
+            )
         )
         document_threshold = (
             -1.0
             if selected_specific_pdf
             else min(self.settings.similarity_threshold, 0.20)
         )
-        doc_results: list[DocumentSearchResult] = self.document_retriever.search(
-            query=question,
+        active_document_retriever = document_retriever_override or self.document_retriever
+        doc_results: list[DocumentSearchResult] = active_document_retriever.search(
+            query=retrieval_query,
             top_k=4,
             min_similarity=document_threshold,
             filename=document_filename,
+            document_id=document_id,
         )
         document_context_block = _build_document_context_block(doc_results)
 
         # --- 4. Unified Prompt Construction ---
+        evidence_context_block = context.formatted_context_block
+        if conversation_context:
+            evidence_context_block += (
+                "\n\n--- RECENT CONVERSATION CONTEXT (for resolving follow-ups; not verified evidence) ---\n"
+                + conversation_context
+                + "\n--- END CONVERSATION CONTEXT ---"
+            )
         grounded_prompt = build_grounded_prompt(
             question=question,
-            evidence_context_block=context.formatted_context_block,
+            evidence_context_block=evidence_context_block,
             document_context_block=document_context_block if doc_results else None,
         )
 

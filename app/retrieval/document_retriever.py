@@ -100,6 +100,7 @@ class DocumentRetriever:
         top_k: int = 4,
         min_similarity: float = 0.20,
         filename: str | None = None,
+        document_id: str | None = None,
     ) -> list[DocumentSearchResult]:
         """Search indexed document chunks by semantic cosine similarity."""
         if not self.vector_store or not query.strip():
@@ -112,20 +113,22 @@ class DocumentRetriever:
         search_filename = filename if filename and not automatic_document and filename != "__all__" else None
         raw_results = self.vector_store.search(
             query_vector=query_vec,
-            top_k=max(top_k * 4, 12) if automatic_document else top_k,
+            top_k=max(top_k * 4, 12) if automatic_document and not document_id else top_k,
             min_similarity=min_similarity,
             filter_fn=(
-                (lambda metadata: metadata.get("filename") == search_filename)
+                (lambda metadata: metadata.get("doc_id") == document_id)
+                if document_id
+                else (lambda metadata: metadata.get("filename") == search_filename)
                 if search_filename
                 else None
             ),
         )
 
         if automatic_document and raw_results:
-            best_filename = raw_results[0].metadata.get("filename")
+            best_document_id = raw_results[0].metadata.get("doc_id")
             raw_results = [
                 result for result in raw_results
-                if result.metadata.get("filename") == best_filename
+                if result.metadata.get("doc_id") == best_document_id
             ][:top_k]
         elif filename == "__all__":
             raw_results = raw_results[:top_k]
