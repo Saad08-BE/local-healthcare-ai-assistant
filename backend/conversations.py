@@ -18,9 +18,14 @@ class CreateConversationRequest(BaseModel):
     title: str = Field(default="New chat", min_length=1, max_length=120)
 
 
+class UpdateConversationRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    is_pinned: bool | None = None
+
+
 def _owned_conversation(connection, conversation_id: str, user_id: int):
     row = connection.execute(
-        "SELECT id, user_id, title, created_at, updated_at FROM conversations WHERE id = ? AND user_id = ?",
+        "SELECT id, user_id, title, is_pinned, created_at, updated_at FROM conversations WHERE id = ? AND user_id = ?",
         (conversation_id, user_id),
     ).fetchone()
     if row is None:
@@ -42,7 +47,7 @@ def list_conversations(request: Request) -> dict:
                    (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
             FROM conversations c
             WHERE c.user_id = ?
-            ORDER BY c.updated_at DESC, c.created_at DESC
+            ORDER BY c.is_pinned DESC, c.updated_at DESC, c.created_at DESC
             """,
             (user["id"],),
         ).fetchall()
@@ -66,8 +71,43 @@ def create_conversation(
             (conversation_id, user["id"], title),
         )
         row = connection.execute(
-            "SELECT id, title, created_at, updated_at FROM conversations WHERE id = ?",
+            "SELECT id, title, is_pinned, created_at, updated_at FROM conversations WHERE id = ?",
             (conversation_id,),
+        ).fetchone()
+    return {"conversation": dict(row)}
+
+
+@router.patch("/{conversation_id}")
+def update_conversation(
+    conversation_id: str,
+    payload: UpdateConversationRequest,
+    request: Request,
+    csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
+) -> dict:
+    """Rename or pin a conversation owned by the authenticated user."""
+    _require_csrf(request, csrf_token)
+    user = _current_user(request)
+    if payload.title is None and payload.is_pinned is None:
+        raise HTTPException(status_code=422, detail="Provide a new title or pin state.")
+    initialize_database()
+    with database_connection() as connection:
+        _owned_conversation(connection, conversation_id, user["id"])
+        if payload.title is not None:
+            title = payload.title.strip()
+            if not title:
+                raise HTTPException(status_code=422, detail="Conversation title cannot be empty.")
+            connection.execute(
+                "UPDATE conversations SET title = ? WHERE id = ? AND user_id = ?",
+                (title, conversation_id, user["id"]),
+            )
+        if payload.is_pinned is not None:
+            connection.execute(
+                "UPDATE conversations SET is_pinned = ? WHERE id = ? AND user_id = ?",
+                (int(payload.is_pinned), conversation_id, user["id"]),
+            )
+        row = connection.execute(
+            "SELECT id, title, is_pinned, created_at, updated_at FROM conversations WHERE id = ? AND user_id = ?",
+            (conversation_id, user["id"]),
         ).fetchone()
     return {"conversation": dict(row)}
 

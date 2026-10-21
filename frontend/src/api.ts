@@ -49,7 +49,7 @@ function dateMillis(value: string | number | undefined): number {
 }
 
 type DbMessage = { id: number; role: "user" | "assistant" | "system"; content: string; metadata_json?: string | null; created_at: string };
-type DbConversation = { id: string; title: string; created_at?: string; updated_at?: string };
+type DbConversation = { id: string; title: string; is_pinned?: number | boolean; created_at?: string; updated_at?: string };
 function mapMessage(row: DbMessage): ChatMessage | null {
   if (row.role !== "user" && row.role !== "assistant") return null;
   let metadata: Record<string, unknown> = {};
@@ -73,7 +73,7 @@ function mapMessage(row: DbMessage): ChatMessage | null {
   return { id: String(row.id), role: row.role, content: row.content, createdAt, ...(result ? { result } : {}) };
 }
 function mapConversation(row: DbConversation): Conversation {
-  return { id: row.id, title: row.title || "New chat", updatedAt: dateMillis(row.updated_at || row.created_at), messages: [] };
+  return { id: row.id, title: row.title || "New chat", updatedAt: dateMillis(row.updated_at || row.created_at), isPinned: Boolean(row.is_pinned), messages: [] };
 }
 
 export const api = {
@@ -107,6 +107,12 @@ export const api = {
     const conversation = mapConversation(result.conversation);
     conversation.messages = result.messages.map(mapMessage).filter((message): message is ChatMessage => message !== null);
     return { conversation, documents: result.documents };
+  },
+  updateConversation: async (id: string, payload: { title?: string; is_pinned?: boolean }) => {
+    const result = await write<{ conversation: DbConversation }>("/api/conversations/" + encodeURIComponent(id), {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+    });
+    return mapConversation(result.conversation);
   },
   deleteConversation: (id: string) => write<{ deleted: boolean }>("/api/conversations/" + encodeURIComponent(id), { method: "DELETE" }),
   documents: async (conversationId: string) => request<{ documents: LocalDocument[] }>("/api/conversations/" + encodeURIComponent(conversationId) + "/documents"),
