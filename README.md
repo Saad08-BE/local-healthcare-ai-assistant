@@ -1,221 +1,256 @@
 # Local Privacy-Based Healthcare Intelligence System
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
-[![Privacy: 100% Local](https://img.shields.io/badge/privacy-100%25%20Local-green.svg)]()
-[![Hardware: Apple Silicon M1](https://img.shields.io/badge/hardware-MacBook%20Air%20M1%208GB-orange.svg)]()
-[![Tests: 51 Passed](https://img.shields.io/badge/tests-51%20passed-brightgreen.svg)]()
+A local-first healthcare assistant built as a final-year Computer Engineering project. It combines a **React + TypeScript web interface**, a **FastAPI backend**, a **SQLite database** for local accounts and conversations, and a **Retrieval-Augmented Generation (RAG)** pipeline that uses a locally running Ollama model.
 
-A modular, privacy-first, locally-hosted **Healthcare Retrieval-Augmented Generation (RAG)** application designed for academic demonstration and final-year engineering defense. 
+The goal is to help users understand general health information and their own uploaded medical documents while keeping application processing on the user's machine. This is an educational prototype, not a replacement for a qualified healthcare professional.
 
-The system retrieves clinical evidence from both structured healthcare records, real doctor–patient consultations, and user-uploaded medical PDF documents, then synthesizes grounded responses using a **local LLM (via Ollama on Apple Silicon Metal)**.
+## Contents
 
-> [!IMPORTANT]
-> **Privacy Guarantee**: All healthcare data, patient records, vector embeddings, uploaded PDFs, query logs, and LLM inference run **100% locally on your computer**. Zero cloud APIs, zero external databases, and zero data leakage.
+- [Highlights](#highlights)
+- [Architecture](#architecture)
+- [Technology Stack](#technology-stack)
+- [Requirements](#requirements)
+- [Setup](#setup)
+- [Run the Application](#run-the-application)
+- [Configuration](#configuration)
+- [Privacy and Safety](#privacy-and-safety)
+- [Testing](#testing)
+- [Project Structure](#project-structure)
+- [Limitations](#limitations)
 
----
+## Highlights
 
-## 🏗️ System Architecture
+- **Local AI inference:** connects to Ollama through the loopback address `127.0.0.1`; the default model is `qwen2.5:3b`.
+- **Evidence-based answers:** retrieves relevant context from the healthcare RAG pipeline and can include information extracted from uploaded PDF documents.
+- **PDF support:** upload and manage documents associated with a conversation; document retrieval and page-level source details help users trace document-based answers.
+- **Accounts and saved conversations:** local registration/login, persistent chat history, and conversation actions such as renaming, pinning, and deleting.
+- **Conversation-scoped documents:** documents are associated with a user's conversation rather than being treated as one shared chat context.
+- **Medical safety cues:** input validation, urgent-symptom warnings, and a medical disclaimer are included in the response flow.
+- **Local storage:** SQLite stores account and conversation data; application data and uploaded documents are stored locally.
+- **Web interface:** responsive chat experience built with React, TypeScript, Vite, and Tailwind CSS.
+
+## Architecture
 
 ```text
-                                  USER QUERY
+┌─────────────────────────────────────────────┐
+│ Browser UI                                  │
+│ React + TypeScript + Vite                   │
+│ Login/register, chat, history, PDF controls │
+└──────────────────────┬──────────────────────┘
+                       │ HTTP (loopback)
+                       ▼
+┌─────────────────────────────────────────────┐
+│ FastAPI backend                             │
+│ Authentication, conversations, documents,  │
+│ request validation and chat API             │
+└──────────────┬─────────────────┬────────────┘
+               │                 │
+               ▼                 ▼
+┌────────────────────────┐  ┌──────────────────┐
+│ Local SQLite database  │  │ Healthcare RAG   │
+│ Users, sessions, chats,│  │ retrieval, PDF   │
+│ messages and metadata  │  │ evidence, safety │
+└────────────────────────┘  └─────────┬────────┘
                                       │
                                       ▼
-                     ┌──────────────────────────────────┐
-                     │ 1. Safety Triage & Validation    │
-                     │  • Empty/malformed checks        │
-                     │  • Privacy guard (blocks ID lookups)
-                     │  • Emergency red-flag detection  │
-                     └────────────────┬─────────────────┘
-                                      │
-                                      ▼
-                     ┌──────────────────────────────────┐
-                     │ 2. Multi-Source Hybrid Retriever │
-                     └───────┬───────────────┬──────────┘
-                             │               │
-        ┌────────────────────┴───┐       ┌───┴────────────────────────┐
-        ▼                        ▼       ▼                            ▼
-┌───────────────┐ ┌───────────────┐ ┌───────────────┐ ┌───────────────────────┐
-│ Statistical   │ │ Clinical Case │ │ Doctor Q&A    │ │ Uploaded Medical PDFs │
-│ Cohort Probs  │ │ Vectors       │ │ Consultations │ │ (PyMuPDF Chunk Index) │
-│ (Precomputed) │ │ (10k Sample)  │ │ (ChatDoctor)  │ │ (Page Citations)      │
-└───────┬───────┘ └───────┬───────┘ └───────┬───────┘ └───────────┬───────────┘
-        │                 │                 │                     │
-        └─────────────────┼─────────────────┼─────────────────────┘
-                          │                 │
-                          ▼                 ▼
-                     ┌──────────────────────────────────┐
-                     │ 3. Context Formatter & Grounding │
-                     │  • Formats evidence blocks       │
-                     │  • Embeds page citations         │
-                     │  • Injects anti-hallucination rules
-                     └────────────────┬─────────────────┘
-                                      │
-                                      ▼
-                     ┌──────────────────────────────────┐
-                     │ 4. Local LLM (Ollama 3B on Metal)│
-                     │  • Strict evidence synthesis     │
-                     │  • Offline fallback degradation  │
-                     │  • Medical disclaimer attachment │
-                     └────────────────┬─────────────────┘
-                                      │
-                                      ▼
-                            GROUNDED RESPONSE + SOURCES
+                           ┌────────────────────┐
+                           │ Local Ollama model │
+                           │ qwen2.5:3b default │
+                           └────────────────────┘
 ```
 
----
+### Request flow
 
-## 📊 Phase-by-Phase Roadmap & Current Status
+1. The user signs in and opens or creates a conversation.
+2. The React interface sends a request to the local FastAPI service.
+3. The backend validates the request and obtains relevant evidence from the healthcare retrieval pipeline and, when selected or relevant, the conversation's uploaded documents.
+4. The local Ollama model generates a response using the supplied context.
+5. The interface displays the answer, safety notices, and available source information. Conversation data is persisted in the local SQLite database.
 
-| Phase | Milestone | Status | Key Deliverables |
-|---|---|---|---|
-| **Phase 0** | Repository & Requirements Inspection | ✅ **COMPLETE** | Workspace initialization, environment validation, data safety protocols. |
-| **Phase 1** | Architecture & Foundation | ✅ **COMPLETE** | Local path policy, loopback endpoint validation, safety filters, initial test scaffold. |
-| **Phase 2** | Dataset Analysis & Preprocessing | ✅ **COMPLETE** | Profiled 100k raw rows, filtered 81 outliers, privacy stripping of `Patient_ID`, stratified 10k sampling, cohort aggregations. |
-| **Phase 3** | Local Retrieval & Vector Indexing | ✅ **COMPLETE** | 384-d normalized dense embeddings, custom disk-persisted vector store ($<50$ MB), $<5$ ms cosine similarity search. |
-| **Phase 4** | Local LLM Integration (Ollama 3B) | ✅ **COMPLETE** | Ollama adapter on Apple Silicon Metal, strict grounding prompts, graceful offline degradation, CLI query tool. |
-| **Phase 5** | PDF & Document Ingestion | ✅ **COMPLETE** | Local PyMuPDF extractor, sentence-aware sliding window chunker, document vector index, page-level citations. |
-| **Phase 6** | **Unified Complete Hybrid RAG Pipeline** | ✅ **COMPLETE** | Dataset, ChatDoctor, and PDF evidence are retrieved in one grounded query loop. |
-| **Phase 7** | **Streamlit Web User Interface** | ✅ **COMPLETE** | Local chat UI with history, PDF upload, source inspector, status, and settings. |
-| **Phase 8** | **Safety, Logging & System Robustness** | ✅ **COMPLETE** | Input validation, privacy-preserving logging, and safety triage are covered. |
-| **Phase 9** | **Testing, Benchmarking & Evaluation** | ✅ **COMPLETE** | Unit/integration coverage and local benchmark tooling are included. |
-| **Phase 10**| **Academic & Viva Defense Documentation**| ✅ **COMPLETE** | Architecture, evaluation, progress, and viva-defense documents are included. |
+## Technology Stack
 
----
-
-## 🛠️ Summary of Completed Work (Phases 0 to 10)
-
-### 1. Dual Dataset Ingestion & Preprocessing (Phase 2 & Dataset Update)
-- **`Indian_healthcare.csv`**: Analyzed 100,000 tabular hospital records, removed 81 non-physiological outliers (negative glucose), removed all `Patient_ID` fields for privacy, generated a 10,000-record stratified sample, and computed cohort statistical distributions (`data/processed/cohort_aggregates.json`).
-- **`ChatDoctor-HealthCareMagic-100k.csv`**: Cleaned and indexed 10,000 real doctor–patient consultations (`data/processed/clean_chatdoctor_10000.jsonl`) for natural clinical Q&A and practical home care guidance.
-
-### 2. Local Embedding Layer & Vector Store (Phase 3)
-- **Local Embeddings**: 384-dimensional dense vectors with zero-dependency offline deterministic normalized vector engine + `sentence-transformers` compatibility.
-- **Disk-Persisted Vector Store**: Custom NumPy/JSON local vector store in `vector_store/` using normalized cosine similarity dot-products and binary heap top-$k$ selection. Takes $<50$ MB RAM and searches 10,000 records in $<5$ ms.
-
-### 3. Local LLM Integration & Medical Grounding (Phase 4)
-- **Ollama Adapter**: Connects strictly to loopback (`http://127.0.0.1:11434`) using `qwen2.5:3b` with Apple Silicon GPU/Metal acceleration.
-- **Medical Grounding Prompt**: Instructs LLM to rely strictly on retrieved evidence, declare "insufficient evidence" for ungrounded queries, never fabricate medications/dosages, and append healthcare disclaimers.
-- **Graceful Degradation**: If Ollama is offline, the system never crashes—it displays structured evidence directly in $<0.2$s.
-
-### 4. Local PDF Ingestion & Document Retrieval (Phase 5)
-- **PyMuPDF Document Ingestor**: Extracts text page-by-page from PDFs in `data/documents/` with error handling for corrupted/empty files.
-- **Sentence-Aware Chunker**: Splits pages into 600-character chunks with 100-character overlap while keeping sentences intact.
-- **Page-Level Citations**: Every retrieved document chunk carries exact page metadata (e.g. `Clinical_Guidelines.pdf (Page 2)`).
-
----
-
-## 💻 Hardware Budget (Optimized for MacBook Air M1, 8GB RAM)
-
-| Component | RAM Footprint | Execution Method |
+| Layer | Technology | Responsibility |
 |---|---|---|
-| **macOS Base Baseline** | ~3.5 – 4.0 GB | System OS |
-| **Local LLM (`qwen2.5:3b` Q4)** | ~2.0 – 2.2 GB | Apple Metal (GPU/Neural Engine) via Ollama |
-| **Local Vector Stores (All 3 Indices)**| **~60 – 80 MB** | Disk-persisted in-memory arrays |
-| **Embedding Engine & Python App** | ~150 – 200 MB | Local Python Process |
-| **Total Memory Usage** | **~6.2 – 6.6 GB / 8 GB** | **Zero swap thrashing, ultra-smooth local execution** |
+| Frontend | React, TypeScript, Vite, Tailwind CSS | Chat interface, account screens, conversation history and document controls |
+| Backend API | Python, FastAPI, Pydantic | API endpoints, validation, authentication and application orchestration |
+| Database | SQLite | Local users, sessions, conversations, messages, documents and document chunks |
+| LLM runtime | Ollama | Runs the language model locally; default model: `qwen2.5:3b` |
+| Embeddings | Sentence Transformers | Text embeddings; configured model: `sentence-transformers/all-MiniLM-L6-v2` |
+| Document processing | PyMuPDF | Extracts text and page information from PDF files |
+| Data/retrieval utilities | NumPy, pandas and project RAG modules | Local data processing and evidence retrieval |
+| Frontend testing | Vitest, Testing Library | Frontend unit/component tests |
+| Python testing | unittest-based tests in the repository | Backend and retrieval behavior tests |
 
----
+## Requirements
 
-## 🚀 Quick Start Guide
+- Python 3.9 or newer.
+- Node.js and npm (use a current LTS release).
+- Ollama installed locally.
+- Sufficient disk space and memory for the selected local model and embedding model.
+- macOS, Linux, or another environment compatible with the dependencies. Apple Silicon acceleration may be available on supported Macs.
 
-### 1. Prerequisites
-- macOS (Apple Silicon M1/M2/M3 or Intel)
-- Python 3.9+
-- [Ollama](https://ollama.com) (for local LLM inference)
+## Setup
 
-### 2. Installation
-Clone the repository and enter the directory:
+Run commands from the repository root.
+
+### 1. Clone the repository and select the project branch
+
 ```bash
-cd "local privacy-based health care intelligence system"
+git clone https://github.com/Saad08-BE/local-healthcare-ai-assistant.git
+cd local-healthcare-ai-assistant
+git checkout feat/conversation-actions-menu
 ```
 
-Create a virtual environment (optional but recommended):
+### 2. Create a Python virtual environment
+
+**macOS/Linux:**
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
+```
+
+Install the Python dependencies declared by the repository:
+
+```bash
 pip install -r requirements.txt
+pip install fastapi uvicorn python-multipart
 ```
 
-### 3. Run Automated Tests
-Verify all unit and integration tests pass:
+If your checkout includes additional backend dependency instructions, follow those as well. Keep the virtual environment activated when running the backend.
+
+### 3. Install frontend dependencies
+
 ```bash
-python3 -m unittest discover -v
+cd frontend
+npm install
+cd ..
 ```
 
-### 4. Start Local Ollama (Optional for Natural Language AI Synthesis)
-In one terminal tab, start the local Ollama server:
-```bash
-ollama serve
-```
+### 4. Install and prepare Ollama
 
-In a second terminal tab, download the 3B model (done once):
+Install Ollama using the instructions on [the official Ollama website](https://ollama.com/), start the local Ollama service, then download the default model:
+
 ```bash
 ollama pull qwen2.5:3b
 ```
 
-### 5. Ask a Healthcare Question (CLI Tool)
+The configured embedding model is `sentence-transformers/all-MiniLM-L6-v2`. It may need to be downloaded the first time it is initialized; prepare model files before an offline demonstration if needed.
+
+## Run the Application
+
+Open **two terminal windows** from the repository root.
+
+### Terminal 1 — Start the FastAPI backend
+
+Activate the virtual environment if it is not already active, then run:
+
 ```bash
-python3 scripts/ask_question.py "What conditions and supportive care are associated with fever and cough?"
+source .venv/bin/activate
+uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-### 6. Ingest Your Own Medical PDFs
-Place any medical report or guideline PDF into `data/documents/`, then run:
+The API is available locally at `http://127.0.0.1:8000`. Interactive API documentation is available at `http://127.0.0.1:8000/api/docs`.
+
+### Terminal 2 — Start the React frontend
+
 ```bash
-python3 scripts/ingest_documents.py
+cd frontend
+npm run dev
 ```
 
-### 7. Launch the Web Interface
+Open the local URL printed by Vite (normally `http://127.0.0.1:5173`). Register a local account or sign in, then create a conversation to begin.
+
+To create a production frontend build:
+
 ```bash
-streamlit run app/main.py
+cd frontend
+npm run build
 ```
 
-The included Streamlit configuration binds the interface to `127.0.0.1` only.
+## Configuration
 
----
+The repository includes an `.env.example` file documenting local model and retrieval settings. Copy it to `.env` if you want to maintain local overrides, and review the settings before starting the application.
 
-## 📁 Repository Structure
+| Setting | Default | Purpose |
+|---|---|---|
+| `HEALTHCARE_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Local Ollama service address |
+| `HEALTHCARE_LLM_MODEL` | `qwen2.5:3b` | Chat model used by the RAG pipeline |
+| `HEALTHCARE_EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Text embedding model |
+| `HEALTHCARE_CHUNK_SIZE` | `600` | Target text chunk size for document retrieval |
+| `HEALTHCARE_CHUNK_OVERLAP` | `100` | Overlap between adjacent text chunks |
+| `HEALTHCARE_TOP_K` | `5` | Number of top retrieval results to consider |
+| `HEALTHCARE_SIMILARITY_THRESHOLD` | `0.35` | Retrieval similarity threshold |
+| `HEALTHCARE_HOST` | `127.0.0.1` | Configured local host |
+| `HEALTHCARE_PORT` | `8501` | Legacy/configuration setting; the React/FastAPI development run commands above use ports 5173 and 8000 respectively |
+| `HEALTHCARE_DEBUG` | `false` | Debug setting |
+
+The frontend API base defaults to `http://127.0.0.1:8000`; it can be overridden with `VITE_API_BASE_URL` in the frontend environment.
+
+## Privacy and Safety
+
+- The intended application flow uses local services: the browser UI, FastAPI backend, SQLite database, Ollama inference and local document processing.
+- The backend is configured for loopback access in the provided development commands. Do not expose it to a public network without a separate security review.
+- Do not commit medical PDFs, real patient records, credentials, local databases, or secret environment files to Git.
+- Local processing does not automatically mean every dependency is offline from the first run: package installation and model downloads may require internet access. For an offline demo, download and verify required packages and model files in advance.
+- Generated answers can be incomplete or incorrect. Source retrieval and disclaimers reduce risk but do not guarantee medical accuracy.
+- This project is an academic prototype, not a diagnostic device or a substitute for professional medical advice. For emergencies, contact local emergency services or seek urgent medical care.
+
+## Testing
+
+Run the checks available in the frontend:
+
+```bash
+cd frontend
+npm test
+npm run lint
+npm run build
+```
+
+For Python tests, activate the virtual environment at the repository root and run:
+
+```bash
+python -m unittest discover -v
+```
+
+A test command can expose environment-dependent failures if optional models or services are unavailable. Start Ollama when running tests that explicitly require a live local model.
+
+## Project Structure
 
 ```text
-local privacy-based health care intelligence system/
-├── app/
-│   ├── config/          # Validated runtime settings & local path policies
-│   ├── embeddings/      # Local 384-d dense embedding adapters
-│   ├── ingestion/       # PDF chunker & dataset preprocessing pipelines
-│   ├── llm/             # Ollama client, grounding prompts, & RAG pipeline
-│   ├── retrieval/       # Local vector store & hybrid search engines
-│   ├── safety/          # Triage, emergency filters, & disclaimers
-│   └── ui/              # Streamlit local web interface
-├── data/
-│   ├── raw/             # Original datasets (read-only, git-ignored)
-│   ├── processed/       # Cleaned JSONL samples & cohort aggregations
-│   └── documents/       # Local user-uploaded PDF medical documents
-├── vector_store/        # Local disk-persisted vector indices
-├── scripts/
-│   ├── ask_question.py          # Interactive CLI query tool
-│   ├── build_index.py           # Dataset index builder
-│   ├── build_chatdoctor_index.py # ChatDoctor index builder
-│   ├── ingest_documents.py      # PDF document batch indexer
-│   ├── preprocess_dataset.py    # Dataset cleaning & sampling CLI
-│   ├── preprocess_chatdoctor.py # ChatDoctor cleaning CLI
-│   └── profile_dataset.py       # Zero-dependency dataset profiler
-├── tests/               # Automated unit & integration tests
-├── docs/                # Architecture, profiling, and progress reports
-├── requirements.txt     # Lightweight non-CUDA dependencies
-└── README.md            # Master project documentation
+.
+├── backend/
+│   ├── main.py                  # FastAPI application and chat endpoint
+│   ├── auth.py                  # Local registration and session handling
+│   ├── database.py              # SQLite schema and connection helpers
+│   ├── conversations.py         # Conversation API
+│   └── conversation_documents.py # Conversation-specific document API
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx              # Main React application
+│   │   ├── api.ts               # Frontend API client
+│   │   └── types.ts             # Shared frontend types
+│   ├── package.json
+│   └── vite.config.ts
+├── app/                         # Shared local RAG, model and configuration modules
+├── data/                        # Local runtime data; do not commit private records
+├── tests/                       # Automated tests
+├── .env.example                 # Example local configuration
+├── pyproject.toml
+└── requirements.txt
 ```
 
----
+## Limitations
 
-## ⚖️ Ethical & Healthcare Disclaimers
+- Response quality depends on the retrieved evidence, the selected model, and the quality of uploaded PDF text.
+- Scanned/image-only PDFs may require OCR support, which may not be available in every setup.
+- First-time setup can require internet access to install packages and retrieve model files.
+- The application is intended for local development and academic evaluation. Review authentication, session handling, file validation, and deployment settings before any use beyond a trusted local machine.
 
-This system is an **educational and academic research project** and is **not a certified diagnostic device**. 
-- It does not replace consultation with a qualified medical professional.
-- It intentionally restricts patient record lookups to safeguard privacy.
-- For emergency or acute symptoms, users must seek immediate emergency medical care.
+## Academic Project
 
+**Project:** Local Privacy-Based Healthcare Intelligence System  
+**Repository:** [Saad08-BE/local-healthcare-ai-assistant](https://github.com/Saad08-BE/local-healthcare-ai-assistant)  
+**Target branch for this version:** `feat/conversation-actions-menu`
 
----
-
-## React + FastAPI migration (experimental)
-
-A local-only React frontend is being introduced alongside the existing Streamlit app. See [`MIGRATION_REACT_FASTAPI.md`](MIGRATION_REACT_FASTAPI.md) for setup instructions, architecture, local launch commands, tests, and current limitations. Streamlit remains supported while the new interface is verified.
